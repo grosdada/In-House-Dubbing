@@ -1,0 +1,23 @@
+{
+ "id": "projet-exemple",
+ "title": "Projet exemple",
+ "subtitle": "Format d'un fichier projet",
+ "source": "Scénario d'exemple",
+ "nameVar": {"label": "Prénom du capitaine", "def": "Max"},
+ "chars": {
+  "CAPITAINE": {"n": "Le capitaine", "c": "#6F8FE0", "v": "Direction générale de la voix du personnage."},
+  "ROBOT": {"n": "Le robot", "c": "#9B6BFF", "v": "Voix plate, polie, un temps de retard."},
+  "GROUPE": {"n": "Groupe", "c": "#7C809E", "v": "Sons collectifs : efforts, chutes, cris."}
+ },
+ "seqs": [
+  {
+   "id": "SEQ01", "folder": "SEQ01_le-pont", "title": "Le pont", "slug": "INT. PONT DU VAISSEAU - NUIT", "pages": "p.1",
+   "summary": "Résumé de la séquence en deux ou trois phrases.",
+   "lines": [
+    ["01", "CAPITAINE", "", "Status report.", "Intention de jeu pour l'acteur.", 1],
+    ["02", "ROBOT", "", "All systems nominal, {NAME}.", "{NAME} est remplacé par le prénom réglé en haut de la page.", 1],
+    ["03", "GROUPE", "v", "[secousse, tout le monde tombe]", "Un son vocal sans texte.", 1]
+   ]
+  }
+ ]
+}

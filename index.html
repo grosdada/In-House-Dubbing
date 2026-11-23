@@ -1,0 +1,1009 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>In-House-Dubbing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* In-House-Dubbing — enregistrement de voix maquettes, projet par projet.
+   Layout : barre de commandes en haut, rail des séquences à gauche, répliques à droite.
+   Nuit indigo, or des boutons d'action. Rouge réservé au Rec. */
+:root{
+  --sky:#11132A; --sky-2:#191C3A; --sky-3:#232750; --rule:#30355F;
+  --dust:#B9B6AC; --hi:#EDEAE1; --orb:#E2B23F; --orb-soft:rgba(226,178,63,.13);
+  --rec:#E5484D; --ok:#5BC48B; --ia:#7FD1C4;
+  --display:"Bowlby One SC","Arial Black",Impact,sans-serif;
+  --body:"Libre Franklin","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--sky);color:var(--dust);font-family:var(--body);font-size:15px;line-height:1.55}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--orb);outline-offset:2px}
+.label{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+
+/* barre du haut */
+.top{position:sticky;top:0;z-index:20;background:rgba(17,19,42,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--rule);
+  padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px))}
+.top-in{max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.orb{width:30px;height:30px;border-radius:50%;flex:none;background:radial-gradient(circle at 34% 30%,#FFF1C4 0,#F0C552 18%,#C98F1E 52%,#6E4B0C 100%);box-shadow:0 0 18px rgba(226,178,63,.45)}
+.brand h1{margin:0;font-family:var(--display);font-weight:400;font-size:20px;color:var(--hi);letter-spacing:.01em;line-height:1}
+.brand .label{color:var(--dust);display:block;margin-top:3px}
+.pill{font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:2px;border:1px solid var(--rule);white-space:nowrap}
+.pill.on{border-color:var(--ok);color:var(--ok)}
+.prog{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--hi)}
+.bar{width:120px;height:6px;background:var(--sky-3);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--orb);width:0}
+.btn{background:var(--sky-3);border:1px solid var(--rule);border-radius:3px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--hi)}
+.btn:hover{border-color:var(--dust)}
+.btn.gold{background:var(--orb);border-color:var(--orb);color:#1A1405}
+.btn.gold:hover{filter:brightness(1.08)}
+
+.tools{max-width:1280px;margin:10px auto 0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.fchip{background:none;border:1px solid var(--rule);border-radius:20px;padding:3px 10px;font-size:12.5px;display:flex;align-items:center;gap:6px}
+.fchip i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.fchip[aria-pressed="true"]{background:var(--sky-3);border-color:var(--hi);color:var(--hi)}
+.field{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.field select,.field input{background:var(--sky-2);border:1px solid var(--rule);border-radius:3px;padding:5px 8px;max-width:220px}
+.field input{width:110px}
+.check{display:flex;align-items:center;gap:6px;font-size:12.5px}
+
+/* corps */
+.layout{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:250px 1fr;gap:28px;
+  padding:22px max(16px,env(safe-area-inset-right,0px)) 80px max(16px,env(safe-area-inset-left,0px))}
+.nav{position:sticky;top:var(--toph,190px);align-self:start;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - var(--toph,190px) - 20px);overflow:auto}
+.nav button{text-align:left;background:none;border:1px solid transparent;border-radius:3px;padding:8px 10px;display:grid;grid-template-columns:44px 1fr auto;gap:6px;align-items:baseline}
+.nav button:hover{background:var(--sky-2)}
+.nav button[aria-current="true"]{background:var(--sky-2);border-color:var(--rule);box-shadow:inset 3px 0 0 var(--orb)}
+.nav .n{font-family:var(--mono);font-size:11px;color:var(--dust)}
+.nav .t{color:var(--hi);font-weight:600;font-size:13.5px;line-height:1.3}
+.nav .c{font-family:var(--mono);font-size:11px;color:var(--dust)}
+.nav .c.full{color:var(--ok)}
+.nav .sep{height:1px;background:var(--rule);margin:6px 0}
+.navsel{display:none}
+
+.seqhead{display:flex;flex-direction:column;gap:10px;padding-bottom:18px;border-bottom:1px solid var(--rule);margin-bottom:8px}
+.seqhead .row1{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.seqhead h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(24px,3vw,32px);color:var(--hi);line-height:1.05}
+.slug{font-family:var(--mono);font-size:12px;color:var(--dust)}
+.seqcast{display:flex;flex-wrap:wrap;gap:6px}
+.seqcast .fchip{padding:4px 11px;font-size:13px}
+.seqcast .fchip b{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--dust)}
+.seqcast .fchip.done b{color:var(--ok)}
+.seqcast .fchip[aria-pressed="true"] b{color:var(--hi)}
+.summary{color:var(--hi);max-width:72ch;font-size:15.5px}
+.folder{font-family:var(--mono);font-size:11.5px;color:var(--dust)}
+
+.lines{display:flex;flex-direction:column}
+.line{display:grid;grid-template-columns:34px 150px minmax(0,1fr) 300px;gap:14px;padding:14px 10px;border-bottom:1px solid var(--rule);border-radius:3px;align-items:start;outline:none}
+.line:hover{background:rgba(255,255,255,.015)}
+.line.focus{background:var(--sky-2);box-shadow:inset 3px 0 0 var(--hi)}
+.line.playing{box-shadow:inset 3px 0 0 var(--orb);background:var(--orb-soft)}
+.line.recording{box-shadow:inset 3px 0 0 var(--rec);background:rgba(229,72,77,.08)}
+.num{font-family:var(--mono);font-size:12px;color:var(--dust);padding-top:3px}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--hi)}
+.chip i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.en{margin:0;color:var(--hi);font-size:18px;line-height:1.45}
+.en.vocal{font-style:italic;color:var(--dust);font-size:16px}
+.en mark{background:none;color:var(--orb);border-bottom:1px dashed var(--orb)}
+.dir{margin:6px 0 0;font-size:13.5px;color:var(--dust)}
+.dir .pg{font-family:var(--mono);font-size:11px;opacity:.7;margin-left:6px}
+.tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:1px 5px;border-radius:2px;border:1px solid var(--orb);color:var(--orb);margin-left:6px;vertical-align:2px}
+.tag.v{border-color:var(--dust);color:var(--dust)}
+
+.ctl{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.rec{display:inline-flex;align-items:center;gap:8px;border:1.5px solid var(--rec);background:none;color:#FFD9DA;border-radius:20px;padding:6px 14px 6px 10px;font-weight:700;font-size:13px;letter-spacing:.04em}
+.rec::before{content:"";width:11px;height:11px;border-radius:50%;background:var(--rec)}
+.rec:hover{background:rgba(229,72,77,.15)}
+.rec.on{background:var(--rec);color:#fff}
+.rec.on::before{border-radius:2px;background:#fff}
+.rec.busy{opacity:.6;pointer-events:none}
+.meter{width:120px;height:6px;border-radius:3px;background:var(--sky-3);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),var(--orb) 75%,var(--rec))}
+.timer{font-family:var(--mono);font-size:12px;color:#FFD9DA}
+.recrow{display:flex;align-items:center;gap:10px}
+.takes{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}
+.take{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden;font-family:var(--mono);font-size:11.5px}
+.take button{background:none;border:0;padding:3px 7px;color:var(--dust)}
+.take button:hover{color:var(--hi);background:var(--sky-3)}
+.take .tp{color:var(--hi)}
+.take.sel{border-color:var(--orb)}
+.take.sel .tp{background:var(--orb);color:#1A1405}
+.take .ts{border-left:1px solid var(--rule)}
+.take .td{border-left:1px solid var(--rule)}
+.take .td.confirm{background:var(--rec);color:#fff}
+.take .tc{border-left:1px solid var(--rule);color:var(--ia) !important;font-weight:500}
+.take.ia{border-color:var(--ia)}
+.take.ia .tp{color:var(--ia)}
+.take.ia.sel{border-color:var(--orb)}
+.take.ia.sel .tp{background:var(--orb);color:#1A1405}
+.take .busy{opacity:.6;pointer-events:none}
+.elbox{background:var(--sky-2);border:1px solid var(--ia);border-radius:4px;padding:18px 20px;margin-bottom:18px;display:flex;flex-direction:column;gap:12px}
+.elbox h3{margin:0;color:var(--hi);font-size:17px}
+.elbox p{margin:0;font-size:14px;max-width:72ch}
+.elrow{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.elrow input[type=password]{background:var(--sky);border:1px solid var(--rule);border-radius:3px;padding:7px 10px;min-width:0;width:min(360px,100%);font-family:var(--mono);font-size:13px}
+.elrow select{background:var(--sky);border:1px solid var(--rule);border-radius:3px;padding:5px 8px}
+.elrow input[type=range]{width:110px;accent-color:var(--ia)}
+.ok{color:var(--ok);font-weight:600}
+.elbox .hint{font-size:13px;color:var(--dust)}
+.vsel{display:flex;gap:6px;align-items:center;margin-top:10px}
+.vsel select{flex:1;min-width:0;background:var(--sky);border:1px solid var(--rule);border-radius:3px;padding:5px 8px;font-size:13px}
+.vsel button{background:var(--sky-3);border:1px solid var(--rule);border-radius:3px;padding:4px 8px;font-size:12px}
+.none{font-family:var(--mono);font-size:11.5px;color:var(--dust);opacity:.7}
+
+.voices{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.voice{background:var(--sky-2);border:1px solid var(--rule);border-radius:4px;padding:16px 18px}
+.voice h3{margin:0 0 6px;color:var(--hi);font-size:16px;display:flex;align-items:center;gap:8px}
+.voice h3 i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.voice p{margin:0;font-size:14px}
+.voice .cnt{font-family:var(--mono);font-size:11px;margin-top:8px;display:block}
+
+.help{max-width:76ch;display:flex;flex-direction:column;gap:18px}
+.help h3{margin:0 0 6px;color:var(--hi);font-size:17px}
+.help ol,.help ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.help code{font-family:var(--mono);font-size:12.5px;color:var(--hi);background:var(--sky-2);padding:1px 5px;border-radius:2px}
+.help .box{background:var(--sky-2);border:1px solid var(--rule);border-radius:4px;padding:16px 18px}
+
+.gate{position:fixed;inset:0;z-index:40;background:var(--sky);display:grid;place-items:center;padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}
+.gate form{width:min(380px,100%);background:var(--sky-2);border:1px solid var(--rule);border-radius:6px;padding:26px;display:flex;flex-direction:column;gap:14px}
+.gate .orb{width:44px;height:44px}
+.gate h2{margin:0;font-family:var(--display);font-weight:400;color:var(--hi);font-size:24px;line-height:1.05}
+.gate p{margin:0;font-size:14px}
+.gate label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--hi)}
+.gate input,.acct input,.acct select{background:var(--sky);border:1px solid var(--rule);border-radius:3px;padding:8px 10px;color:var(--hi)}
+.gate .err{color:#FF9A9D;font-size:13.5px;min-height:1em}
+.who{font-family:var(--mono);font-size:12px;color:var(--hi)}
+.acct{display:flex;flex-direction:column;gap:18px;max-width:760px}
+.acct .box{background:var(--sky-2);border:1px solid var(--rule);border-radius:4px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.acct h3{margin:0;color:var(--hi);font-size:17px}
+.acct .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.acct .row label{display:flex;flex-direction:column;gap:4px;font-size:12.5px}
+.acct table{width:100%;border-collapse:collapse;font-size:14px}
+.acct td,.acct th{text-align:left;padding:8px 10px 8px 0;border-top:1px solid var(--rule)}
+.acct th{font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:.1em;text-transform:uppercase;border-top:0}
+.acct td.act{text-align:right;white-space:nowrap}
+.acct td.act button{margin-left:6px}
+.home{display:flex;flex-direction:column;gap:18px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.pcard{text-align:left;background:var(--sky-2);border:1px solid var(--rule);border-radius:6px;padding:20px;display:flex;flex-direction:column;gap:10px;color:var(--dust)}
+.pcard:hover{border-color:var(--orb)}
+.pcard .pn{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.pcard h3{margin:0;font-family:var(--display);font-weight:400;font-size:24px;color:var(--hi);line-height:1.05}
+.pcard .bar{width:100%}
+.pcard .meta{font-family:var(--mono);font-size:12px}
+.acct .projs{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px}
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--hi);color:var(--sky);padding:10px 16px;border-radius:3px;font-weight:600;font-size:14px;z-index:50;max-width:min(92vw,560px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.toast.err{background:var(--rec);color:#fff}
+.keys{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:max(16px,env(safe-area-inset-bottom,0px));font-family:var(--mono);font-size:11px;color:var(--dust);background:var(--sky-2);border:1px solid var(--rule);border-radius:3px;padding:6px 10px}
+.keys b{color:var(--hi);font-weight:500}
+
+.layout.nonav{grid-template-columns:1fr}
+@media (max-width:1050px){ .line{grid-template-columns:30px minmax(0,1fr)} .line .who{grid-column:2} .line .txt{grid-column:2} .line .ctl{grid-column:2;align-items:flex-start} .takes{justify-content:flex-start} }
+@media (max-width:860px){ .layout{grid-template-columns:1fr} .nav{display:none} .navsel{display:block;width:100%;background:var(--sky-2);border:1px solid var(--rule);border-radius:3px;padding:8px;margin-bottom:14px} .voices{grid-template-columns:1fr} .keys{display:none} .top{position:static} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><div class="orb" aria-hidden="true"></div><div><h1>In-House-Dubbing</h1><span class="label" id="projlabel">Projets</span></div></div>
+    <button class="btn" id="home" type="button" hidden>← Projets</button>
+    <span class="pill" id="mode"></span>
+    <div class="prog"><span id="progtxt">0 / 0</span><span class="bar"><i id="progbar"></i></span></div>
+    <button class="btn" id="playseq" type="button">▶ Lire la séquence</button>
+    <button class="btn gold" id="transfer" type="button">Transfert audio</button>
+    <span class="who" id="who" hidden></span><button class="btn" id="logout" type="button" hidden>Déconnexion</button>
+  </div>
+  <div class="tools">
+    <div class="chips" id="filters"></div>
+    <label class="check"><input type="checkbox" id="todo"> Seulement à enregistrer</label>
+    <label class="field" id="micfield">Micro <select id="mic"><option value="">Micro par défaut</option></select></label>
+    <label class="field" id="namefield"><span id="namelabel">Prénom</span> <input id="name" maxlength="24" autocomplete="off"></label>
+    <label class="check" id="advfield"><input type="checkbox" id="advance" checked> Ligne suivante après chaque prise</label>
+    <label class="check" id="autoiafield" hidden><input type="checkbox" id="autoia"> Voix IA automatique après chaque prise</label>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="nav" id="nav" aria-label="Séquences"></nav>
+  <main id="main">
+    <select class="navsel" id="navsel" aria-label="Séquence"></select>
+    <div id="view"></div>
+  </main>
+</div>
+
+<div class="keys" id="keys"><b>Espace</b> rec / stop · <b>P</b> écouter · <b>↑ ↓</b> réplique</div>
+<div class="toast" id="toast" hidden></div>
+<div class="gate" id="gate" hidden></div>
+
+<script>
+/* ================== LE PROJET ==================
+   Le scénario de chaque projet est chargé depuis le serveur (api.php?action=script)
+   ou, hors ligne, depuis le fichier _projet.js écrit par le transfert. Format : voir README. */
+let PROJECT = null, CHARS = {}, SEQS = [];
+
+/* ================== ÉTAT ================== */
+const ONLINE = /^https?:$/.test(location.protocol);
+const QS = new URLSearchParams(location.search);
+const KEY = QS.get("k") || "";
+let PID = QS.get("p") || "";
+let LINES = [], BYID = {};
+function loadProject(p){
+  PROJECT = p; CHARS = p.chars || {};
+  SEQS = (p.seqs || []).map(s => ({id: s.id, folder: s.folder, t: s.title, slug: s.slug || "", p: s.pages || "", s: s.summary || "", L: s.lines || []}));
+  LINES = [];
+  SEQS.forEach((s, si) => s.L.forEach(l => LINES.push({id: s.id + "_L" + l[0], seq: si, folder: s.folder, num: l[0], ch: l[1], kind: l[2] || "", text: l[3], dir: l[4] || "", pg: l[5] || ""})));
+  BYID = Object.fromEntries(LINES.map(l => [l.id, l]));
+  document.title = p.title + " · In-House-Dubbing";
+  $("#projlabel").textContent = (p.num ? "Projet " + p.num + " · " : "") + p.title + (p.subtitle ? " · " + p.subtitle : "");
+  const nv = p.nameVar;
+  $("#namefield").hidden = !nv || !ONLINE;
+  if (nv) $("#namelabel").textContent = nv.label;
+}
+let state = {name: "", takes: {}, selected: {}, el: {hasKey: false, voices: {}}};
+let ME = null;                // {name, role}
+let elVoices = null;          // liste des voix du compte ElevenLabs (chargée à la demande)
+const converting = new Set(); // prises en cours de conversion
+let localFound = {};
+let cur = 0;                 // index de séquence ; -1 = les voix ; -2 = mode d'emploi ; -3 = comptes ; -9 = accueil
+let filter = "ALL";
+let focusId = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const store = {get(k){try{return localStorage.getItem("ihd-"+PID+"-"+k)}catch(e){return null}}, set(k,v){try{localStorage.setItem("ihd-"+PID+"-"+k,v)}catch(e){}}};
+
+function toast(msg, err){ const t = $("#toast"); t.textContent = msg; t.className = "toast" + (err ? " err" : ""); t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, err ? 6000 : 2600); }
+
+async function api(action, data){
+  let url = "api.php?action=" + action + (PID ? "&p=" + encodeURIComponent(PID) : "");
+  let opt = {cache: "no-store"};
+  if (data){ const fd = data instanceof FormData ? data : new FormData(); if (!(data instanceof FormData)) for (const k in data) fd.append(k, data[k]); opt = {method: "POST", body: fd}; }
+  else url += "&_=" + Date.now();
+  const r = await fetch(url, opt);
+  let j; try { j = await r.json(); } catch(e) { j = {ok: false, error: "Le serveur a répondu de façon inattendue (" + r.status + ")."}; }
+  if (r.status === 401 && j.login){ showGate("login"); throw new Error(j.error); }
+  if (!j.ok) throw new Error(j.error || "Erreur du serveur.");
+  return j;
+}
+function applyState(j){
+  if (j.takes){ state.name = j.name || state.name; state.takes = j.takes || {}; state.selected = j.selected || {}; }
+  if (j.el){ state.el = j.el; $("#autoiafield").hidden = !(ONLINE && state.el.hasKey); $("#autoia").checked = !!state.el.auto; $("#autoia").disabled = !(ME && ME.role === "admin"); $("#autoiafield").title = $("#autoia").disabled ? "Réglé par l'admin pour tout le monde" : ""; }
+}
+function voiceFor(ch){ return state.el && state.el.voices && state.el.voices[ch]; }
+function canConvert(ch){ return ONLINE && state.el && state.el.hasKey && !!voiceFor(ch); }
+
+function hasAudio(id){ return ONLINE ? !!(state.takes[id] && state.takes[id].length) : !!localFound[id]; }
+function audioUrl(id, file){
+  if (ONLINE) return "api.php?action=audio&p=" + encodeURIComponent(PID) + "&f=" + encodeURIComponent(file || state.selected[id]);
+  return localFound[id];
+}
+function baseName(l){ return l.id + "_" + l.ch + ".wav"; }
+function visibleLines(si){ return SEQS[si].L.map(x => BYID[SEQS[si].id + "_L" + x[0]]).filter(l => (filter === "ALL" || l.ch === filter) && (!$("#todo").checked || !hasAudio(l.id))); }
+
+/* ================== RENDU ================== */
+function lineText(l){
+  if (l.kind === "v") return '<p class="en vocal">' + esc(l.text) + '<span class="tag v">son vocal</span></p>';
+  const t = esc(l.text).split("{NAME}").join("<mark>" + esc(state.name || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "{NAME}") + "</mark>");
+  return '<p class="en">' + t + (l.kind === "a" ? '<span class="tag">adapté</span>' : "") + "</p>";
+}
+function takesHtml(l){
+  if (!ONLINE) return localFound[l.id] ? '<div class="takes"><span class="take sel"><button class="tp" data-act="play" type="button">▶ ' + esc(baseName(l)) + '</button></span></div>' : '<span class="none">Pas encore de fichier</span>';
+  const list = state.takes[l.id] || [];
+  if (!list.length) return '<span class="none">Aucune prise</span>';
+  const conv = canConvert(l.ch);
+  return '<div class="takes">' + list.map(t => {
+    const sel = state.selected[l.id] === t.f;
+    const busy = converting.has(t.f);
+    let h = '<span class="take' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
+      '<button class="tp" data-act="play" type="button" title="Écouter la prise ' + t.t + (t.by ? " (enregistrée par " + esc(t.by) + ")" : "") + '">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '</button>' +
+      (sel ? "" : '<button class="ts" data-act="select" type="button" title="Retenir cette prise">★</button>') +
+      (conv && !t.cv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Convertir avec la voix ElevenLabs de ' + esc(voiceFor(l.ch).name) + '">' + (busy ? "…" : "→ IA") + '</button>' : "") +
+      '<button class="td" data-act="delete" type="button" title="Supprimer cette prise">✕</button></span>';
+    if (t.cv){
+      const s2 = state.selected[l.id] === t.cv.f;
+      h += '<span class="take ia' + (s2 ? " sel" : "") + '" data-file="' + esc(t.cv.f) + '">' +
+        '<button class="tp" data-act="play" type="button" title="Version IA de la prise ' + t.t + ' (voix ' + esc(t.cv.v) + ')">▶ P' + t.t + '·IA</button>' +
+        (s2 ? "" : '<button class="ts" data-act="select" type="button" title="Retenir la version IA">★</button>') +
+        (conv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Refaire la conversion (voix ' + esc(voiceFor(l.ch).name) + ')">' + (busy ? "…" : "↻") + '</button>' : "") +
+        '<button class="td" data-act="delete" type="button" title="Supprimer la version IA">✕</button></span>';
+    }
+    return h;
+  }).join("") + "</div>";
+}
+function lineHtml(l){
+  const c = CHARS[l.ch];
+  return '<div class="line" data-id="' + l.id + '" tabindex="0">' +
+    '<div class="num">' + l.num + '</div>' +
+    '<div class="who"><span class="chip" style="--c:' + c.c + '"><i></i>' + esc(c.n) + '</span></div>' +
+    '<div class="txt">' + lineText(l) + '<p class="dir">' + esc(l.dir) + '<span class="pg">p.' + l.pg + '</span></p></div>' +
+    '<div class="ctl">' + (ONLINE ? '<div class="recrow"><span class="timer" hidden></span><span class="meter" hidden><i></i></span><button class="rec" data-act="rec" type="button">Rec</button></div>' : "") +
+    '<div class="tk">' + takesHtml(l) + '</div></div></div>';
+}
+function renderNav(){
+  const counts = SEQS.map(s => { const ls = s.L.map(x => s.id + "_L" + x[0]); return [ls.filter(hasAudio).length, ls.length]; });
+  let h = '<button type="button" data-nav="-1"' + (cur === -1 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">Les voix</span><span class="c"></span></button>' +
+          '<button type="button" data-nav="-2"' + (cur === -2 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">Mode d\'emploi</span><span class="c"></span></button>' +
+          (ONLINE && ME ? '<button type="button" data-nav="-3"' + (cur === -3 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + '</span><span class="c"></span></button>' : "") + '<div class="sep"></div>';
+  SEQS.forEach((s, i) => { const [a, b] = counts[i]; h += '<button type="button" data-nav="' + i + '"' + (cur === i ? ' aria-current="true"' : "") + '><span class="n">' + s.id + '</span><span class="t">' + esc(s.t) + '</span><span class="c' + (a === b ? " full" : "") + '">' + a + "/" + b + "</span></button>"; });
+  $("#nav").innerHTML = h;
+  $("#navsel").innerHTML = '<option value="-1">Les voix</option><option value="-2">Mode d\'emploi</option>' + (ONLINE && ME ? '<option value="-3">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + "</option>" : "") + SEQS.map((s, i) => '<option value="' + i + '">' + s.id + " · " + esc(s.t) + " (" + counts[i][0] + "/" + counts[i][1] + ")</option>").join("");
+  $("#navsel").value = String(cur);
+  const done = LINES.filter(l => hasAudio(l.id)).length;
+  $("#progtxt").textContent = done + " / " + LINES.length + " répliques";
+  $("#progbar").style.width = (100 * done / LINES.length) + "%";
+}
+function renderFilters(){
+  const keys = ["ALL"].concat(Object.keys(CHARS));
+  $("#filters").innerHTML = keys.map(k => '<button class="fchip" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (k === "ALL" ? "" : ' style="--c:' + CHARS[k].c + '"') + ">" + (k === "ALL" ? "Tous" : "<i></i>" + esc(CHARS[k].n)) + "</button>").join("");
+}
+// Personnages présents dans la séquence, dans l'ordre d'apparition, avec répliques enregistrées / total.
+function seqCastHtml(si){
+  const s = SEQS[si], order = [];
+  s.L.forEach(x => { if (!order.includes(x[1])) order.push(x[1]); });
+  const chip = (k, label, a, b, color) => '<button class="fchip' + (a === b ? " done" : "") + '" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (color ? ' style="--c:' + color + '"' : "") + ' title="' + (k === "ALL" ? "Toute la scène" : "Seulement les répliques de " + esc(label) + " dans cette séquence") + '">' + (color ? "<i></i>" : "") + esc(label) + " <b>" + a + "/" + b + "</b></button>";
+  const ids = s.L.map(x => [s.id + "_L" + x[0], x[1]]);
+  let h = chip("ALL", "Toute la scène", ids.filter(x => hasAudio(x[0])).length, ids.length, "");
+  order.forEach(k => { const mine = ids.filter(x => x[1] === k); h += chip(k, CHARS[k].n, mine.filter(x => hasAudio(x[0])).length, mine.length, CHARS[k].c); });
+  return '<div class="seqcast" aria-label="Personnages de la séquence">' + h + "</div>";
+}
+function renderView(){
+  const v = $("#view");
+  if (cur === -9){ renderHome(); return; }
+  $("#playseq").hidden = cur < 0;
+  if (cur === -1){
+    v.innerHTML = '<div class="seqhead"><h2>Les voix</h2><p class="summary">Une direction générale par personnage. Les intentions précises sont à côté de chaque réplique.</p></div>' +
+      (ONLINE ? elBoxHtml() : "") + '<div class="voices">' +
+      Object.keys(CHARS).map(k => { const n = LINES.filter(l => l.ch === k); return '<div class="voice" style="--c:' + CHARS[k].c + '"><h3><i></i>' + esc(CHARS[k].n) + '</h3><p>' + esc(CHARS[k].v) + '</p><span class="cnt label">' + n.filter(l => hasAudio(l.id)).length + " / " + n.length + ' répliques</span>' + (ONLINE && state.el.hasKey ? voiceSelHtml(k) : "") + '</div>'; }).join("") + "</div>";
+    if (ONLINE && state.el.hasKey && !elVoices) loadVoices();
+    return;
+  }
+  if (cur === -2){ v.innerHTML = helpHtml(); return; }
+  if (cur === -3){ renderAccounts(); return; }
+  const s = SEQS[cur];
+  const ls = visibleLines(cur);
+  v.innerHTML = '<div class="seqhead"><div class="row1"><h2>' + s.id + " · " + esc(s.t) + '</h2><span class="slug">' + esc(s.slug) + " · " + s.p + '</span></div>' +
+    seqCastHtml(cur) +
+    '<p class="summary">' + esc(s.s) + '</p><span class="folder">Dossier : ' + s.folder + '</span>' +
+    (ONLINE && state.el.hasKey ? '<div><button class="btn" id="convseq" type="button" title="Convertit la prise retenue de chaque réplique qui n\'a pas encore de version IA">→ Convertir la séquence en voix IA</button></div>' : "") + '</div>' +
+    '<div class="lines">' + (ls.length ? ls.map(lineHtml).join("") : '<p class="none" style="padding:20px 0">Aucune réplique ne correspond au filtre dans cette séquence.</p>') + "</div>";
+  if (focusId && !document.querySelector('.line[data-id="' + focusId + '"]')) focusId = null;
+  if (focusId) setFocus(focusId, false);
+}
+function refreshLine(id){
+  const row = document.querySelector('.line[data-id="' + id + '"]');
+  if (row) row.querySelector(".tk").innerHTML = takesHtml(BYID[id]);
+  renderNav();
+  const sc = document.querySelector(".seqcast"); if (sc && cur >= 0) sc.outerHTML = seqCastHtml(cur);
+}
+function renderAll(){ renderNav(); renderView(); }
+function go(i){ stopSeq(); cur = i; if (i >= 0 && filter !== "ALL" && !SEQS[i].L.some(x => x[1] === filter)){ filter = "ALL"; renderFilters(); } renderAll(); window.scrollTo({top: 0}); store.set("seq", String(i)); }
+
+function helpHtml(){
+  return '<div class="seqhead"><h2>Mode d\'emploi</h2></div><div class="help">' +
+  '<div class="box"><h3>Pour enregistrer les voix</h3><ol>' +
+  "<li>Ouvrez le lien reçu dans Chrome, Edge, Safari ou Firefox, sur ordinateur, avec un casque sur les oreilles pour éviter que le son des prises ne repasse dans le micro.</li>" +
+  "<li>Choisissez votre micro en haut de page. Au premier Rec, le navigateur demande l'autorisation d'utiliser le micro : acceptez.</li>" +
+  "<li>Choisissez une séquence à gauche. Filtrez par personnage si vous enregistrez un rôle à la fois, et cochez « Seulement à enregistrer » pour cacher ce qui est déjà fait.</li>" +
+  "<li>Lisez le résumé de la séquence et l'intention sous chaque réplique. Les sons vocaux (cris, efforts, rires) s'enregistrent comme les répliques.</li>" +
+  "<li>Cliquez <b>Rec</b> (ou la touche Espace), jouez la réplique, recliquez pour arrêter. La prise part toute seule sur le serveur. Refaites autant de prises que vous voulez : chacune est gardée (P1, P2, P3…).</li>" +
+  "<li>La prise en or est la prise retenue : c'est la dernière par défaut. Cliquez ★ sur une autre pour la retenir à sa place, ✕ deux fois pour supprimer une prise ratée.</li>" +
+  "<li>« Lire la séquence » enchaîne les prises retenues dans l'ordre, pour entendre la scène.</li></ol></div>" +
+  '<div class="box"><h3>Voix IA (ElevenLabs)</h3><ol>' +
+  "<li>Dans l'onglet <b>Les voix</b>, collez une fois la clé API ElevenLabs. Elle est gardée sur le serveur et n'est plus jamais affichée.</li>" +
+  "<li>Toujours dans <b>Les voix</b>, choisissez une voix ElevenLabs pour chaque personnage (▶ pour l'écouter).</li>" +
+  "<li>Sur une prise, cliquez <b>→ IA</b> : la version transformée apparaît à côté (P2·IA) et devient la prise retenue. ↻ refait la conversion, par exemple après avoir changé de voix.</li>" +
+  "<li>« Convertir la séquence en voix IA » traite d'un coup toutes les prises retenues qui n'ont pas encore leur version IA. La case « Voix IA automatique après chaque prise » convertit chaque nouvelle prise dès son envoi.</li>" +
+  "<li>Les prises originales sont toujours gardées. Si une voix ne convient pas, changez-la dans <b>Les voix</b> : le bouton « ↻ Refaire ses prises » refait toutes les versions IA de ce personnage à partir des originaux, avec la nouvelle voix.</li>" +
+  "<li>Les conversions sont décomptées sur le compte ElevenLabs de la clé.</li></ol></div>" +
+  '<div class="box"><h3>Pour récupérer les audios sur le PC</h3><ol>' +
+  "<li>Ouvrez le même lien dans Chrome ou Edge, sur le PC.</li>" +
+  "<li>Cliquez <b>Transfert audio</b> et choisissez le dossier du projet sur votre PC (par exemple <code>…\\Voix-maquettes</code>). Le navigateur demande l'autorisation d'y écrire : acceptez. Il s'en souviendra pour ce projet.</li>" +
+  "<li>Chaque séquence va dans son dossier. La prise retenue de chaque réplique y est copiée sous son nom simple, par exemple <code>SEQ01_L02_PRESIDENT.wav</code>. Toutes les prises sont aussi copiées dans le sous-dossier <code>_prises</code>, par exemple <code>SEQ01_L02_PRESIDENT_T3.wav</code>, avec leurs versions IA (<code>SEQ01_L02_PRESIDENT_T3_IA.wav</code>).</li>" +
+  "<li>Relancez le transfert quand vous voulez : les fichiers déjà à jour sont sautés, et si la prise retenue a changé, le fichier simple est remplacé.</li></ol></div>" +
+  '<div class="box"><h3>Sans connexion</h3><p>Le transfert dépose aussi <code>In-House-Dubbing.html</code> et <code>_projet.js</code> dans le dossier. Ouvert directement depuis le dossier, ce fichier affiche le projet et lit les fichiers déjà transférés (les noms simples), sans Rec ni transfert.</p></div>' +
+  '<div class="box"><h3>Le format</h3><p>WAV mono 16 bits, à la fréquence du micro (48 kHz en général), sans traitement : ni réduction de bruit ni contrôle automatique du gain, pour garder la voix telle quelle. Les toutes premières et dernières fractions de seconde sont coupées pour retirer le clic du bouton.</p></div>' +
+  "</div>";
+}
+
+/* ================== VOIX IA (ELEVENLABS) ================== */
+function elBoxHtml(){
+  const e = state.el;
+  const opt = (v, cur, label) => '<option value="' + v + '"' + (v === cur ? " selected" : "") + ">" + label + "</option>";
+  let h = '<div class="elbox"><h3>Voix IA · ElevenLabs</h3>' +
+    '<p>Une seule personne joue tous les rôles. Chaque prise peut ensuite être transformée avec la voix ElevenLabs choisie pour son personnage (voice changer) : le jeu, le rythme et les intentions sont gardés, seul le timbre change. La version IA apparaît à côté de la prise (P2·IA), elle devient la prise retenue et part au transfert comme les autres.</p>';
+  const admin = ME && ME.role === "admin";
+  if (!admin){
+    h += e.hasKey ? '<p class="hint">La clé et les réglages sont gérés par l\'admin. Vous pouvez choisir la voix de chaque personnage ci-dessous.</p>' : '<p class="hint">L\'admin n\'a pas encore enregistré de clé ElevenLabs.</p>';
+  } else if (!e.hasKey){
+    h += '<div class="elrow"><input type="password" id="elkey" placeholder="Clé API ElevenLabs (sk_…)" autocomplete="off" spellcheck="false"><button class="btn gold" type="button" data-el="savekey">Enregistrer la clé</button></div>' +
+      '<p class="hint">La clé est vérifiée auprès d\'ElevenLabs, puis gardée sur le serveur : elle n\'est plus jamais affichée, ni envoyée aux navigateurs. Les conversions sont décomptées sur le compte de cette clé. Elle doit avoir au moins les permissions « Voices : lecture » et « Voice changer ».</p>';
+  } else {
+    h += '<div class="elrow"><span class="ok">Clé enregistrée (…' + esc(e.keyHint) + ')</span><button class="btn" type="button" data-el="delkey">Retirer la clé</button></div>' +
+      '<div class="elrow">' +
+      '<label class="field">Modèle <select id="elmodel">' + opt("eleven_multilingual_sts_v2", e.model, "Multilingue v2") + opt("eleven_english_sts_v2", e.model, "Anglais v2") + '</select></label>' +
+      '<label class="field">Qualité <select id="elformat">' + opt("wav_48000", e.format, "WAV 48 kHz") + opt("wav_44100", e.format, "WAV 44,1 kHz") + opt("wav_24000", e.format, "WAV 24 kHz") + '</select></label>' +
+      '<label class="field">Stabilité <input type="range" id="elstab" min="0" max="1" step="0.05" value="' + e.stability + '"><span id="elstabv">' + (+e.stability).toFixed(2) + '</span></label>' +
+      '<label class="field">Ressemblance <input type="range" id="elsim" min="0" max="1" step="0.05" value="' + e.similarity + '"><span id="elsimv">' + (+e.similarity).toFixed(2) + '</span></label>' +
+      '<label class="check"><input type="checkbox" id="elnoise"' + (e.noise ? " checked" : "") + '> Nettoyer le bruit de fond</label></div>' +
+      '<p class="hint">Choisissez une voix pour chaque personnage ci-dessous. Si votre offre ElevenLabs ne permet pas le 44,1 ou 48 kHz, la conversion repasse toute seule en 24 kHz.</p>';
+  }
+  return h + "</div>";
+}
+function voiceSelHtml(ch){
+  const cur = voiceFor(ch);
+  let opts = '<option value="">— Pas de voix IA —</option>';
+  if (elVoices) opts += elVoices.map(v => '<option value="' + esc(v.id) + '"' + (cur && cur.id === v.id ? " selected" : "") + ">" + esc(v.name) + (v.cat ? " · " + esc(v.cat) : "") + "</option>").join("");
+  else if (cur) opts += '<option value="' + esc(cur.id) + '" selected>' + esc(cur.name) + "</option>";
+  const n = reconvTargets(ch).length;
+  return '<div class="vsel"><select data-voice="' + ch + '" aria-label="Voix ElevenLabs de ' + esc(CHARS[ch].n) + '">' + opts + '</select><button type="button" data-preview="' + ch + '" title="Écouter un extrait de la voix">▶</button></div>' +
+    (cur && n ? '<div class="vsel"><button type="button" data-reconv="' + ch + '" title="Refait la version IA de ses prises à partir des originaux, avec la voix choisie">↻ Refaire ses ' + n + ' prise(s) avec ' + esc(cur.name) + '</button></div>' : "");
+}
+// Prises d'un personnage à (re)convertir avec sa voix actuelle : versions IA faites avec une autre voix, et prises retenues sans version IA.
+function reconvTargets(ch){
+  const v = voiceFor(ch); if (!v) return [];
+  const out = [];
+  LINES.filter(l => l.ch === ch).forEach(l => (state.takes[l.id] || []).forEach(t => {
+    if (t.cv ? t.cv.vid !== v.id : state.selected[l.id] === t.f) out.push([l.id, t.f]);
+  }));
+  return out;
+}
+async function reconvertChar(ch, b){
+  const todo = reconvTargets(ch); if (!todo.length) return;
+  b.disabled = true;
+  let ok = 0;
+  for (let i = 0; i < todo.length; i++){
+    b.textContent = "Conversion " + (i + 1) + "/" + todo.length + "…";
+    if (await convertTake(todo[i][0], todo[i][1], true)) ok++; else break;
+  }
+  toast(ok + " prise(s) de " + CHARS[ch].n + " refaite(s) avec la voix " + voiceFor(ch).name + ".");
+  if (cur === -1) renderView();
+}
+async function loadVoices(){
+  try { const j = await api("elvoices"); elVoices = j.voices; if (cur === -1) renderView(); }
+  catch(e){ toast(e.message, true); }
+}
+async function convertTake(id, src, quiet){
+  if (converting.has(src)) return false;
+  converting.add(src); refreshLine(id);
+  try {
+    const j = await api("convert", {line: id, file: src});
+    applyState(j);
+    if (!quiet) toast("Version IA prête · " + CHARS[BYID[id].ch].n + " " + BYID[id].num + " (voix " + j.cv.v + ")");
+    return true;
+  } catch(e) {
+    toast("Conversion impossible : " + e.message, true);
+    return false;
+  } finally { converting.delete(src); refreshLine(id); }
+}
+async function convertSeq(){
+  const btn = $("#convseq");
+  const todo = SEQS[cur].L.map(x => BYID[SEQS[cur].id + "_L" + x[0]]).filter(l => canConvert(l.ch)).map(l => {
+    const t = (state.takes[l.id] || []).find(t => t.f === state.selected[l.id]);
+    return t && !t.cv ? [l.id, t.f] : null;
+  }).filter(Boolean);
+  const noVoice = [...new Set(SEQS[cur].L.map(x => x[1]).filter(ch => !voiceFor(ch)))];
+  if (!todo.length){ toast(noVoice.length ? "Rien à convertir. Personnages sans voix IA choisie : " + noVoice.map(c => CHARS[c].n).join(", ") + "." : "Toutes les prises retenues de cette séquence ont déjà leur version IA."); return; }
+  btn.disabled = true;
+  let ok = 0;
+  for (let i = 0; i < todo.length; i++){
+    btn.textContent = "Conversion " + (i + 1) + "/" + todo.length + "…";
+    if (await convertTake(todo[i][0], todo[i][1], true)) ok++; else break;
+  }
+  if ($("#convseq")){ $("#convseq").disabled = false; $("#convseq").textContent = "→ Convertir la séquence en voix IA"; }
+  toast(ok + " prise(s) convertie(s)." + (noVoice.length ? " Sans voix IA : " + noVoice.map(c => CHARS[c].n).join(", ") + "." : ""));
+}
+async function elSave(fields){ try { applyState(await api("elsettings", fields)); } catch(e){ toast(e.message, true); } }
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-el]"); if (b){
+    if (b.dataset.el === "savekey"){
+      const key = ($("#elkey").value || "").trim(); if (!key){ toast("Collez d'abord la clé API.", true); return; }
+      b.disabled = true; b.textContent = "Vérification…";
+      try { await api("elkey", {key}); applyState(await api("state")); elVoices = null; toast("Clé ElevenLabs vérifiée et enregistrée."); renderView(); }
+      catch(err){ toast(err.message, true); b.disabled = false; b.textContent = "Enregistrer la clé"; }
+    } else if (b.dataset.el === "delkey"){
+      if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Retirer vraiment ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "Retirer la clé"; } }, 3000); return; }
+      try { await api("elkey", {key: ""}); applyState(await api("state")); elVoices = null; toast("Clé retirée du serveur."); renderAll(); } catch(err){ toast(err.message, true); }
+    }
+    return;
+  }
+  const p = e.target.closest("[data-preview]"); if (p){
+    const v = voiceFor(p.dataset.preview), full = elVoices && v && elVoices.find(x => x.id === v.id);
+    if (!full || !full.preview){ toast("Pas d'extrait disponible pour cette voix."); return; }
+    stopSeq(); player.src = full.preview; player.play().catch(err => toast("Lecture impossible : " + err.message, true));
+    return;
+  }
+  const rc = e.target.closest("[data-reconv]"); if (rc){ reconvertChar(rc.dataset.reconv, rc); return; }
+  if (e.target.id === "convseq") convertSeq();
+});
+document.addEventListener("change", async e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.voice){
+    const o = t.selectedOptions[0];
+    try { applyState(await api("elmap", {char: t.dataset.voice, id: t.value, name: t.value ? o.textContent.split(" · ")[0] : ""})); toast(t.value ? CHARS[t.dataset.voice].n + " → " + o.textContent.split(" · ")[0] : "Voix IA retirée pour " + CHARS[t.dataset.voice].n); renderView(); }
+    catch(err){ toast(err.message, true); }
+  }
+  else if (t.id === "elmodel") elSave({model: t.value});
+  else if (t.id === "elformat") elSave({format: t.value});
+  else if (t.id === "elstab") elSave({stability: t.value});
+  else if (t.id === "elsim") elSave({similarity: t.value});
+  else if (t.id === "elnoise") elSave({noise: t.checked ? "1" : "0"});
+  else if (t.id === "autoia"){ await elSave({auto: t.checked ? "1" : "0"}); toast(t.checked ? "Voix IA automatique activée pour tout le monde : chaque nouvelle prise sera convertie (si son personnage a une voix)." : "Voix IA automatique désactivée."); }
+});
+document.addEventListener("input", e => {
+  if (e.target.id === "elstab") $("#elstabv").textContent = (+e.target.value).toFixed(2);
+  if (e.target.id === "elsim") $("#elsimv").textContent = (+e.target.value).toFixed(2);
+});
+
+/* ================== COMPTES ================== */
+function showGate(mode){
+  const g = $("#gate"); g.hidden = false;
+  const setup = mode === "setup";
+  g.innerHTML = '<form id="gateform" autocomplete="on"><div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>' +
+    (setup ? "<p>Première ouverture : créez le compte administrateur. Choisissez vous-même l'identifiant et le mot de passe. Ce lien ne servira plus ensuite : tout le monde se connectera avec son compte.</p>" : "<p>Connectez-vous avec le compte que l'admin vous a donné.</p>") +
+    '<label>Identifiant<input id="g-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>' +
+    '<label>Mot de passe<input id="g-pass" name="password" type="password" autocomplete="' + (setup ? "new-password" : "current-password") + '" required minlength="' + (setup ? 8 : 1) + '"></label>' +
+    (setup ? '<label>Confirmer le mot de passe<input id="g-pass2" type="password" autocomplete="new-password" required minlength="8"></label>' : "") +
+    '<div class="err" id="g-err"></div><button class="btn gold" type="submit">' + (setup ? "Créer le compte admin" : "Se connecter") + "</button></form>";
+  $("#g-user").focus();
+  $("#gateform").addEventListener("submit", async e => {
+    e.preventDefault();
+    const user = $("#g-user").value.trim().toLowerCase(), pass = $("#g-pass").value;
+    if (setup && pass !== $("#g-pass2").value){ $("#g-err").textContent = "Les deux mots de passe ne sont pas identiques."; return; }
+    const btn = e.target.querySelector("button"); btn.disabled = true;
+    try {
+      const fd = new FormData(); fd.append("user", user); fd.append("pass", pass); if (setup) fd.append("setup", KEY);
+      const r = await fetch("api.php?action=" + (setup ? "setup" : "login"), {method: "POST", body: fd});
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "Connexion impossible.");
+      ME = j.user;
+      if (setup) history.replaceState(null, "", location.pathname);
+      g.hidden = true; g.innerHTML = "";
+      await startApp();
+    } catch(err) { $("#g-err").textContent = err.message; btn.disabled = false; }
+  });
+}
+function showWho(){
+  $("#who").hidden = $("#logout").hidden = !ME;
+  if (ME) $("#who").textContent = ME.name + (ME.role === "admin" ? " · admin" : "");
+}
+$("#home").addEventListener("click", goHome);
+$("#logout").addEventListener("click", async () => {
+  try { await fetch("api.php?action=logout", {method: "POST"}); } catch(e) {}
+  ME = null; showWho(); showGate("login");
+});
+async function renderAccounts(){
+  const v = $("#view");
+  const admin = ME && ME.role === "admin";
+  let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" id="acctback">← Projets</button></div>') + '<div class="seqhead"><h2>' + (admin ? "Comptes" : "Mon compte") + '</h2><p class="summary">' +
+    (admin ? "Les invités enregistrent, convertissent et choisissent les voix des personnages. Seul l'admin gère les comptes, la clé ElevenLabs et les réglages de conversion." : "Connecté en tant que <b>" + esc(ME.name) + "</b>.") + '</p></div><div class="acct">';
+  if (admin){
+    h += '<div class="box"><h3>Créer un compte</h3><div class="row">' +
+      '<label>Identifiant<input id="a-user" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ex. claire"></label>' +
+      '<label>Mot de passe<input id="a-pass" type="text" autocomplete="off" placeholder="8 caractères minimum"></label>' +
+      '<label>Rôle<select id="a-role"><option value="guest">Invité</option><option value="admin">Admin</option></select></label>' +
+      '<button class="btn gold" type="button" data-acct="add">Créer</button></div>' +
+      '<div><span class="hint" style="font-size:13px">Projets ouverts à ce compte (un admin les voit tous) :</span><div class="projs" id="a-projs"></div></div>' +
+      '<p class="hint" style="margin:0;font-size:13px">Transmettez ensuite à la personne l\'adresse de la page, son identifiant et son mot de passe. Elle pourra changer son mot de passe dans « Mon compte ».</p></div>' +
+      '<div class="box"><h3>Comptes existants</h3><div id="a-list"><p class="none">Chargement…</p></div></div>';
+  }
+  h += '<div class="box"><h3>Changer mon mot de passe</h3><div class="row">' +
+    '<label>Mot de passe actuel<input id="m-old" type="password" autocomplete="current-password"></label>' +
+    '<label>Nouveau mot de passe<input id="m-new" type="password" autocomplete="new-password" minlength="8"></label>' +
+    '<button class="btn" type="button" data-acct="mypass">Changer</button></div></div></div>';
+  v.innerHTML = h;
+  if ($("#acctback")) $("#acctback").onclick = goHome;
+  if (admin){
+    try {
+      const j = await api("users");
+      const all = j.allProjects || [];
+      const boxes = (u, prefix) => all.length ? all.map(p => '<label class="check"><input type="checkbox" data-proj="' + esc(p.id) + '"' + (prefix ? "" : ' data-u="' + esc(u.name) + '"') + ((u && (u.role === "admin" || (u.projects || []).includes(p.id))) || (!u && PID === p.id) ? " checked" : "") + (u && u.role === "admin" ? " disabled" : "") + "> " + esc(p.title) + "</label>").join("") : '<span class="none">Aucun projet importé.</span>';
+      $("#a-projs").innerHTML = boxes(null, true);
+      $("#a-list").innerHTML = '<table><tr><th>Identifiant</th><th>Rôle</th><th>Projets</th><th>Créé le</th><th></th></tr>' + j.users.map(u =>
+        '<tr><td>' + esc(u.name) + (u.name === ME.name ? " (vous)" : "") + '</td><td>' + (u.role === "admin" ? "Admin" : "Invité") + '</td><td><div class="projs">' + (u.role === "admin" ? '<span class="none">Tous</span>' : boxes(u, false)) + '</div></td><td>' + (u.created ? new Date(u.created * 1000).toLocaleDateString("fr-FR") : "—") + '</td><td class="act">' +
+        (u.name === ME.name ? "" : '<button class="btn" type="button" data-acct="reset" data-u="' + esc(u.name) + '">Nouveau mot de passe</button><button class="btn" type="button" data-acct="del" data-u="' + esc(u.name) + '">Supprimer</button>') + "</td></tr>").join("") + "</table>";
+    } catch(e) { $("#a-list").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
+  }
+}
+document.addEventListener("change", async e => {
+  const t = e.target; if (!t.dataset || !t.dataset.proj || !t.dataset.u) return;
+  const row = t.closest("tr");
+  const projs = [...row.querySelectorAll("[data-proj]:checked")].map(x => x.dataset.proj).join(",");
+  try { await api("userprojects", {user: t.dataset.u, projects: projs}); toast("Accès de « " + t.dataset.u + " » mis à jour."); }
+  catch(err) { toast(err.message, true); t.checked = !t.checked; }
+});
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-acct]"); if (!b) return;
+  const a = b.dataset.acct;
+  try {
+    if (a === "add"){
+      const projs = [...document.querySelectorAll("#a-projs [data-proj]:checked")].map(x => x.dataset.proj).join(",");
+      await api("useradd", {user: $("#a-user").value.trim().toLowerCase(), pass: $("#a-pass").value, role: $("#a-role").value, projects: projs});
+      toast("Compte « " + $("#a-user").value.trim().toLowerCase() + " » créé."); renderAccounts();
+    } else if (a === "del"){
+      if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer vraiment ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "Supprimer"; } }, 3000); return; }
+      await api("userdel", {user: b.dataset.u}); toast("Compte « " + b.dataset.u + " » supprimé. Ses prises restent."); renderAccounts();
+    } else if (a === "reset"){
+      const row = b.closest("tr");
+      if (!row.querySelector(".r-pass")){ b.insertAdjacentHTML("beforebegin", '<input class="r-pass" type="text" autocomplete="off" placeholder="nouveau mot de passe" style="width:170px">'); b.textContent = "Valider"; row.querySelector(".r-pass").focus(); return; }
+      await api("userreset", {user: b.dataset.u, pass: row.querySelector(".r-pass").value}); toast("Mot de passe de « " + b.dataset.u + " » changé. Ses sessions ouvertes sont fermées."); renderAccounts();
+    } else if (a === "mypass"){
+      await api("mypass", {old: $("#m-old").value, new: $("#m-new").value}); $("#m-old").value = $("#m-new").value = ""; toast("Mot de passe changé.");
+    }
+  } catch(err) { toast(err.message, true); }
+});
+
+/* ================== ACCUEIL : LES PROJETS ================== */
+async function renderHome(){
+  document.title = "In-House-Dubbing";
+  $("#projlabel").textContent = "Projets";
+  const v = $("#view");
+  const admin = ME && ME.role === "admin";
+  v.innerHTML = '<div class="home"><div class="seqhead"><h2>Projets</h2><p class="summary">' + (admin ? "Chaque projet a son scénario, ses voix IA, ses prises et son dossier sur le PC. Ouvrez un projet, ou importez-en un nouveau (fichier .json préparé à partir du scénario)." : "Les projets qui vous sont ouverts.") + "</p>" +
+    '<div class="elrow">' + (admin ? '<label class="btn" for="pimport" style="display:inline-block">Importer un projet (.json)</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
+    '<button class="btn" type="button" data-homeacct>' + (admin ? "Comptes" : "Mon compte") + '</button></div>' +
+    '</div><div class="pgrid" id="pgrid"><p class="none">Chargement…</p></div></div>';
+  try {
+    const j = await api("projects");
+    $("#pgrid").innerHTML = j.projects.length ? j.projects.map(p => '<button class="pcard" type="button" data-open="' + esc(p.id) + '"><span class="pn">' + (p.num ? "Projet " + p.num : "Projet") + '</span><h3>' + esc(p.title) + '</h3>' + (p.subtitle ? "<span>" + esc(p.subtitle) + "</span>" : "") +
+      '<span class="bar"><i style="width:' + (p.lines ? 100 * p.done / p.lines : 0) + '%"></i></span><span class="meta">' + p.done + " / " + p.lines + " répliques · " + p.seqs + (p.seqs > 1 ? " séquences · " : " séquence · ") + p.chars + (p.chars > 1 ? " personnages" : " personnage") + "</span></button>").join("")
+      : '<p class="none">' + (admin ? "Aucun projet pour l'instant. Importez le premier." : "Aucun projet ne vous est encore ouvert. Demandez l'accès à l'admin.") + "</p>";
+  } catch(e) { $("#pgrid").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
+}
+function setChrome(inProject){
+  $(".layout").classList.toggle("nonav", !inProject);
+  $("#nav").hidden = $("#navsel").hidden = !inProject;
+  $(".tools").hidden = !inProject;
+  ["#playseq", "#transfer", "#progtxt", ".prog"].forEach(q => { const el = $(q); if (el) el.hidden = !inProject; });
+  $("#home").hidden = !inProject || !ONLINE;
+  syncTop();
+}
+async function openProject(id){
+  stopSeq();
+  PID = id;
+  history.pushState(null, "", location.pathname + "?p=" + encodeURIComponent(id));
+  try {
+    loadProject((await api("script")).project);
+    applyState(await api("state"));
+  } catch(e) { toast(e.message, true); goHome(); return; }
+  elVoices = null; filter = "ALL"; focusId = null;
+  const s = store.get("seq"); cur = (s !== null && !isNaN(+s) && +s >= -3 && +s < SEQS.length) ? +s : 0;
+  $("#name").value = state.name;
+  setChrome(true); renderFilters(); renderAll(); window.scrollTo({top: 0});
+}
+function goHome(){
+  stopSeq();
+  PID = ""; PROJECT = null; cur = -9;
+  history.pushState(null, "", location.pathname);
+  setChrome(false); renderView(); window.scrollTo({top: 0});
+}
+window.addEventListener("popstate", () => { const p = new URLSearchParams(location.search).get("p") || ""; if (p && p !== PID) openProject(p); else if (!p && PID) goHome(); });
+document.addEventListener("click", e => {
+  const o = e.target.closest("[data-open]"); if (o) openProject(o.dataset.open);
+  if (e.target.closest("[data-homeacct]")){ cur = -3; renderAccounts(); }
+});
+document.addEventListener("change", async e => {
+  if (e.target.id !== "pimport" || !e.target.files[0]) return;
+  const fd = new FormData(); fd.append("file", e.target.files[0]);
+  try {
+    const j = await api("projectimport", fd);
+    toast("Projet « " + j.id + " » " + (j.updated ? "mis à jour (les prises sont conservées)." : "importé.") + (j.migrated ? " Les prises de l'ancienne installation ont été reprises." : ""));
+    renderHome();
+  } catch(err) { toast(err.message, true); }
+  e.target.value = "";
+});
+
+/* ================== LECTURE ================== */
+const player = new Audio();
+let seqPlay = null;
+function markPlaying(id){ document.querySelectorAll(".line.playing").forEach(r => r.classList.remove("playing")); if (id){ const r = document.querySelector('.line[data-id="' + id + '"]'); if (r){ r.classList.add("playing"); r.scrollIntoView({block: "nearest", behavior: "smooth"}); } } }
+function play(id, file){
+  stopSeq(true);
+  const u = audioUrl(id, file); if (!u) return;
+  player.src = u; player.currentTime = 0;
+  player.play().then(() => markPlaying(id)).catch(e => toast("Lecture impossible : " + e.message, true));
+  player.onended = () => markPlaying(null);
+}
+function stopSeq(keepPlayer){ if (seqPlay){ seqPlay = null; $("#playseq").textContent = "▶ Lire la séquence"; } if (!keepPlayer){ player.pause(); markPlaying(null); } }
+function playSeq(){
+  if (seqPlay){ stopSeq(); return; }
+  const ids = visibleLines(cur).map(l => l.id).filter(hasAudio);
+  if (!ids.length){ toast("Aucune prise à lire dans cette séquence pour l'instant."); return; }
+  seqPlay = {ids, i: 0};
+  $("#playseq").textContent = "■ Arrêter";
+  const next = () => {
+    if (!seqPlay) return;
+    if (seqPlay.i >= seqPlay.ids.length){ stopSeq(); return; }
+    const id = seqPlay.ids[seqPlay.i++];
+    player.src = audioUrl(id); player.currentTime = 0;
+    markPlaying(id);
+    player.onended = () => setTimeout(next, 250);
+    player.play().catch(() => setTimeout(next, 50));
+  };
+  next();
+}
+
+/* ================== ENREGISTREMENT ================== */
+let stream = null, actx = null, workletReady = false, rec = null;
+const WORKLET = "class P extends AudioWorkletProcessor{process(i){const c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('ergo-rec',P);";
+
+async function ensureMic(){
+  if (stream && stream.active) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Ce navigateur ne donne pas accès au micro. Utilisez Chrome, Edge, Safari ou Firefox récent.");
+  const dev = $("#mic").value;
+  const a = {echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1};
+  if (dev) a.deviceId = {exact: dev};
+  stream = await navigator.mediaDevices.getUserMedia({audio: a});
+  if (!actx){ try { actx = new AudioContext({sampleRate: 48000}); } catch(e) { actx = new AudioContext(); } }
+  if (!workletReady){
+    const url = URL.createObjectURL(new Blob([WORKLET], {type: "application/javascript"}));
+    await actx.audioWorklet.addModule(url);
+    workletReady = true;
+  }
+  fillMics();
+}
+async function fillMics(){
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
+    const sel = $("#mic"), v = sel.value || store.get("mic") || "";
+    sel.innerHTML = '<option value="">Micro par défaut</option>' + devs.map(d => '<option value="' + esc(d.deviceId) + '">' + esc(d.label || "Micro") + "</option>").join("");
+    if ([...sel.options].some(o => o.value === v)) sel.value = v;
+  } catch(e) {}
+}
+async function startRec(id){
+  if (rec) return;
+  try { await ensureMic(); } catch(e) { toast(e.name === "NotAllowedError" ? "Le micro est bloqué. Autorisez-le dans la barre d'adresse du navigateur, puis réessayez." : "Micro indisponible : " + e.message, true); return; }
+  if (actx.state === "suspended") await actx.resume();
+  stopSeq();
+  const src = actx.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(actx, "ergo-rec");
+  const r = {id, chunks: [], peak: 0, t0: performance.now(), src, node};
+  node.port.onmessage = e => { r.chunks.push(e.data); let m = 0; const d = e.data; for (let i = 0; i < d.length; i += 4){ const a = Math.abs(d[i]); if (a > m) m = a; } r.peak = Math.max(m, r.peak * 0.85); };
+  src.connect(node); node.connect(actx.destination);
+  rec = r;
+  const row = document.querySelector('.line[data-id="' + id + '"]');
+  if (row){ row.classList.add("recording"); const b = row.querySelector(".rec"); b.classList.add("on"); b.textContent = "Stop"; row.querySelector(".meter").hidden = false; row.querySelector(".timer").hidden = false; }
+  const tick = () => {
+    if (rec !== r) return;
+    const row = document.querySelector('.line[data-id="' + id + '"]');
+    if (row){ row.querySelector(".meter i").style.width = Math.min(100, r.peak * 140) + "%"; const s = (performance.now() - r.t0) / 1000; row.querySelector(".timer").textContent = Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); }
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+function wavBlob(chunks, sr){
+  let len = 0; chunks.forEach(c => len += c.length);
+  const cutA = Math.round(sr * 0.06), cutB = Math.round(sr * 0.12);
+  let from = 0, to = len;
+  if (len > sr * 0.6){ from = cutA; to = len - cutB; }
+  const n = to - from;
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, n * 2, true);
+  let pos = 0, o = 44;
+  for (const c of chunks){ for (let i = 0; i < c.length; i++, pos++){ if (pos < from || pos >= to) continue; const s = Math.max(-1, Math.min(1, c[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); o += 2; } }
+  return {blob: new Blob([buf], {type: "audio/wav"}), dur: n / sr};
+}
+async function stopRec(){
+  const r = rec; if (!r) return;
+  rec = null;
+  r.src.disconnect(); r.node.disconnect(); r.node.port.onmessage = null;
+  const l = BYID[r.id];
+  const row = document.querySelector('.line[data-id="' + r.id + '"]');
+  const btn = row && row.querySelector(".rec");
+  if (row){ row.classList.remove("recording"); btn.classList.remove("on"); btn.textContent = "Envoi…"; btn.classList.add("busy"); row.querySelector(".meter").hidden = true; }
+  const {blob, dur} = wavBlob(r.chunks, actx.sampleRate);
+  if (dur < 0.2){ toast("Prise trop courte, rien n'a été envoyé."); if (btn){ btn.textContent = "Rec"; btn.classList.remove("busy"); } return; }
+  const fd = new FormData();
+  fd.append("line", l.id); fd.append("folder", l.folder); fd.append("char", l.ch); fd.append("dur", dur.toFixed(2));
+  fd.append("audio", blob, baseName(l));
+  try {
+    const j = await api("upload", fd);
+    applyState(j);
+    toast("Prise " + j.take.t + " enregistrée · " + CHARS[l.ch].n + " " + l.num);
+    refreshLine(l.id);
+    if ($("#advance").checked) moveFocus(1);
+    if ($("#autoia").checked && canConvert(l.ch)) convertTake(l.id, j.take.f);
+  } catch(e) {
+    toast("La prise n'a pas pu être envoyée : " + e.message + " Elle est perdue, refaites-la.", true);
+  } finally {
+    if (row && row.isConnected){ row.querySelector(".timer").hidden = true; btn.textContent = "Rec"; btn.classList.remove("busy"); }
+  }
+}
+function toggleRec(id){ if (rec){ const was = rec.id; stopRec(); if (was !== id) setTimeout(() => startRec(id), 0); } else startRec(id); }
+
+/* ================== FOCUS / CLAVIER ================== */
+function setFocus(id, scroll){
+  focusId = id;
+  document.querySelectorAll(".line.focus").forEach(r => r.classList.remove("focus"));
+  const row = document.querySelector('.line[data-id="' + id + '"]');
+  if (row){ row.classList.add("focus"); if (scroll !== false) row.scrollIntoView({block: "center", behavior: "smooth"}); }
+}
+function moveFocus(d){
+  const rows = [...document.querySelectorAll(".line")]; if (!rows.length) return;
+  let i = rows.findIndex(r => r.dataset.id === focusId);
+  i = i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + d));
+  setFocus(rows[i].dataset.id);
+}
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (cur < 0) return;
+  if (e.code === "Space" || e.key === "r" || e.key === "R"){ if (!ONLINE) return; e.preventDefault(); if (!focusId) moveFocus(0); if (focusId) toggleRec(focusId); }
+  else if (e.key === "ArrowDown" || e.key === "j"){ e.preventDefault(); moveFocus(1); }
+  else if (e.key === "ArrowUp" || e.key === "k"){ e.preventDefault(); moveFocus(-1); }
+  else if (e.key === "p" || e.key === "P" || e.key === "Enter"){ if (focusId && hasAudio(focusId)){ e.preventDefault(); play(focusId); } }
+});
+
+/* ================== CLICS ================== */
+document.addEventListener("click", async e => {
+  const nav = e.target.closest("[data-nav]"); if (nav){ go(+nav.dataset.nav); return; }
+  const f = e.target.closest("[data-f]"); if (f){ filter = f.dataset.f; renderFilters(); renderView(); return; }
+  const row = e.target.closest(".line"); if (!row) return;
+  const id = row.dataset.id;
+  setFocus(id, false);
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  if (e.detail) b.blur();   // un clic souris ne doit pas laisser le focus sur le bouton (la touche Espace le relancerait)
+  const act = b.dataset.act, take = b.closest(".take"), file = take && take.dataset.file;
+  if (act === "rec") toggleRec(id);
+  else if (act === "play") play(id, file);
+  else if (act === "convert") convertTake(id, b.dataset.src);
+  else if (act === "select"){ try { applyState(await api("select", {line: id, file})); refreshLine(id); } catch(err) { toast(err.message, true); } }
+  else if (act === "delete"){
+    if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "✕"; } }, 3000); return; }
+    try { applyState(await api("delete", {line: id, file})); refreshLine(id); toast("Prise supprimée."); } catch(err) { toast(err.message, true); }
+  }
+});
+$("#navsel").addEventListener("change", e => go(+e.target.value));
+$("#todo").addEventListener("change", renderView);
+$("#playseq").addEventListener("click", playSeq);
+$("#mic").addEventListener("change", e => { store.set("mic", e.target.value); if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; } });
+$("#name").addEventListener("change", async e => {
+  const v = e.target.value.trim(); if (!v || v === state.name) return;
+  try { applyState(await api("name", {name: v})); renderView(); toast("Prénom enregistré pour tout le monde : " + state.name); } catch(err) { toast(err.message, true); e.target.value = state.name; }
+});
+window.addEventListener("beforeunload", e => { if (rec){ e.preventDefault(); e.returnValue = ""; } });
+
+/* ================== TRANSFERT VERS LE PC ================== */
+const idb = {
+  open(){ return new Promise((ok, ko) => { const r = indexedDB.open("ergo-vm", 1); r.onupgradeneeded = () => r.result.createObjectStore("h"); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); }); },
+  async get(k){ const db = await this.open(); return new Promise(ok => { const q = db.transaction("h").objectStore("h").get(k); q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); }); },
+  async set(k, v){ const db = await this.open(); return new Promise(ok => { const t = db.transaction("h", "readwrite"); t.objectStore("h").put(v, k); t.oncomplete = ok; t.onerror = ok; }); }
+};
+async function pickDir(){
+  let dir = null;
+  try { dir = await idb.get("dir-" + PID); } catch(e) {}
+  if (dir){
+    let p = await dir.queryPermission({mode: "readwrite"});
+    if (p !== "granted") p = await dir.requestPermission({mode: "readwrite"});
+    if (p === "granted") return dir;
+  }
+  dir = await window.showDirectoryPicker({id: ("ihd-" + PID).slice(0, 32), mode: "readwrite"});
+  try { await idb.set("dir-" + PID, dir); } catch(e) {}
+  return dir;
+}
+async function writeIfChanged(dirH, name, size, getBlob){
+  const fh = await dirH.getFileHandle(name, {create: true});
+  const cur = await fh.getFile();
+  if (cur.size === size) return false;
+  const blob = await getBlob();
+  const w = await fh.createWritable(); await w.write(blob); await w.close();
+  return true;
+}
+async function sameBytes(file, blob){
+  if (file.size !== blob.size) return false;
+  const n = Math.min(blob.size, 262144);
+  const a = new Uint8Array(await file.slice(0, n).arrayBuffer()), b = new Uint8Array(await blob.slice(0, n).arrayBuffer());
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+async function transfer(){
+  if (!window.showDirectoryPicker){ toast("Le transfert vers le PC marche dans Chrome ou Edge, sur ordinateur.", true); return; }
+  const btn = $("#transfer");
+  let dir;
+  try { dir = await pickDir(); } catch(e) { if (e.name !== "AbortError") toast("Dossier non accessible : " + e.message, true); return; }
+  btn.disabled = true;
+  try {
+    applyState(await api("state"));
+    const ids = Object.keys(state.takes).filter(id => BYID[id]);
+    const total = ids.reduce((a, id) => a + state.takes[id].reduce((n, t) => n + (t.cv ? 2 : 1), 0) + 1, 0);
+    let done = 0, written = 0;
+    const cache = {};
+    const fetchBlob = async f => { if (!cache[f]){ const r = await fetch(audioUrl(null, f), {cache: "no-store"}); if (!r.ok) throw new Error("fichier " + f + " introuvable sur le serveur"); cache[f] = await r.blob(); } return cache[f]; };
+    for (const id of ids){
+      const l = BYID[id];
+      const seqDir = await dir.getDirectoryHandle(l.folder, {create: true});
+      const prDir = await seqDir.getDirectoryHandle("_prises", {create: true});
+      for (const t of state.takes[id]){
+        for (const x of t.cv ? [t, t.cv] : [t]){
+          if (await writeIfChanged(prDir, x.f.split("/")[1], x.s, () => fetchBlob(x.f))) written++;
+          btn.textContent = "Transfert " + (++done) + "/" + total;
+        }
+      }
+      const selF = state.selected[id];
+      if (selF && state.takes[id].some(t => t.f === selF || (t.cv && t.cv.f === selF))){
+        const fh = await seqDir.getFileHandle(baseName(l), {create: true});
+        const blob = await fetchBlob(selF);
+        if (!(await sameBytes(await fh.getFile(), blob))){ const w = await fh.createWritable(); await w.write(blob); await w.close(); written++; }
+      }
+      btn.textContent = "Transfert " + (++done) + "/" + total;
+    }
+    // Lecteur hors ligne : la page et le scénario du projet.
+    try {
+      const js = "window.IHD_PROJECT = " + JSON.stringify(PROJECT) + ";\nwindow.IHD_NAME = " + JSON.stringify(state.name) + ";\n";
+      const w1 = await (await dir.getFileHandle("_projet.js", {create: true})).createWritable(); await w1.write(new Blob([js], {type: "text/javascript"})); await w1.close();
+      const page = await (await fetch("index.html", {cache: "no-store"})).blob();
+      const w2 = await (await dir.getFileHandle("In-House-Dubbing.html", {create: true})).createWritable(); await w2.write(page); await w2.close();
+    } catch(e) {}
+    toast(written ? written + " fichier(s) copié(s) dans " + dir.name + "." : "Tout est déjà à jour dans " + dir.name + ".");
+  } catch(e) {
+    toast("Transfert interrompu : " + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Transfert audio";
+  }
+}
+$("#transfer").addEventListener("click", transfer);
+
+/* ================== MODE DOSSIER LOCAL ================== */
+function probeLocal(){
+  let pending = LINES.length;
+  LINES.forEach(l => {
+    const url = encodeURI(l.folder + "/" + baseName(l));
+    const a = new Audio();
+    a.preload = "metadata";
+    const done = ok => { if (ok) localFound[l.id] = url; if (--pending % 20 === 0 || pending === 0) renderAll(); a.removeAttribute("src"); };
+    a.onloadedmetadata = () => done(true);
+    a.onerror = () => done(false);
+    a.src = url;
+  });
+}
+
+/* ================== DÉMARRAGE ================== */
+let polling = null;
+async function startApp(){
+  showWho();
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) fillMics();
+  if (PID) await openProject(PID); else goHome();
+  if (!polling) polling = setInterval(async () => { if (!ME || !PID || rec || document.hidden) return; try { const before = JSON.stringify([state.takes, state.selected, state.name]); applyState(await api("state")); if (JSON.stringify([state.takes, state.selected, state.name]) !== before){ $("#name").value = state.name; renderAll(); } } catch(e) {} }, 20000);
+}
+function syncTop(){ document.documentElement.style.setProperty("--toph", ($(".top").offsetHeight + 16) + "px"); }
+window.addEventListener("resize", syncTop);
+(async function init(){
+  syncTop();
+  if (ONLINE){
+    $("#mode").textContent = "En ligne"; $("#mode").classList.add("on");
+    let me = null;
+    try { me = await (await fetch("api.php?action=me", {cache: "no-store"})).json(); } catch(e) { toast("Serveur injoignable.", true); return; }
+    if (me.needsSetup){ if (KEY) showGate("setup"); else $("#gate").hidden = false, $("#gate").innerHTML = '<form><h2>In-House-Dubbing</h2><p>Le compte administrateur n\'a pas encore été créé. Ouvrez le lien d\'installation complet.</p></form>'; return; }
+    if (!me.user){ showGate("login"); return; }
+    ME = me.user;
+    await startApp();
+  } else {
+    $("#mode").textContent = "Dossier local · lecture seule";
+    ["#transfer", "#micfield", "#namefield", "#advfield"].forEach(q => $(q).hidden = true);
+    $("#keys").innerHTML = "<b>P</b> écouter · <b>↑ ↓</b> réplique";
+    const sc = document.createElement("script");
+    sc.src = "_projet.js";
+    sc.onload = () => {
+      if (!window.IHD_PROJECT){ sc.onerror(); return; }
+      PID = window.IHD_PROJECT.id; loadProject(window.IHD_PROJECT); state.name = window.IHD_NAME || "";
+      const s = store.get("seq"); cur = (s !== null && !isNaN(+s) && +s >= -2 && +s < SEQS.length) ? +s : 0;
+      setChrome(true); $("#home").hidden = true; $("#transfer").hidden = true; renderFilters(); renderAll(); probeLocal();
+    };
+    sc.onerror = () => { setChrome(false); $("#view").innerHTML = '<div class="seqhead"><h2>In-House-Dubbing</h2><p class="summary">Le fichier <code>_projet.js</code> est introuvable à côté de cette page. Il est déposé par le bouton « Transfert audio » de la version en ligne.</p></div>'; };
+    document.body.appendChild(sc);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# Données du serveur (comptes, sessions, prises, clé ElevenLabs) et secrets
+data/
+config.php
+# Scénarios de projets : à importer sur le serveur, jamais dans le dépôt
+projects/
+*.wav
+.DS_Store
