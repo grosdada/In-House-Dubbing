@@ -121,6 +121,13 @@ button{cursor:pointer}
 .rec.on{background:var(--rec);color:#fff}
 .rec.on::before{border-radius:2px;background:#fff}
 .rec.busy{opacity:.6;pointer-events:none}
+button.gen{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--ia);background:none;color:var(--ia);border-radius:20px;padding:6px 13px 6px 10px;font-weight:700;font-size:13px;letter-spacing:.04em}
+button.gen::before{content:"✦";font-size:12px}
+button.gen:hover{background:color-mix(in srgb,var(--ia) 15%,transparent)}
+button.gen:disabled{opacity:.4;cursor:not-allowed}
+button.gen.busy{opacity:.6;pointer-events:none}
+.take .iatag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ia);border:1px solid var(--ia);border-radius:2px;padding:0 4px;margin-left:5px;vertical-align:1px}
+.take.ia.sel .iatag{color:#1A1405;border-color:#1A1405}
 .meter{width:120px;height:6px;border-radius:3px;background:var(--sky-3);overflow:hidden}
 .meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ok),var(--orb) 75%,var(--rec))}
 .timer{font-family:var(--mono);font-size:12px;color:#FFD9DA}
@@ -274,6 +281,7 @@ let state = {name: "", takes: {}, selected: {}, el: {hasKey: false, voices: {}}}
 let ME = null;                // {name, role}
 let elVoices = null;          // liste des voix du compte ElevenLabs (chargée à la demande)
 const converting = new Set(); // prises en cours de conversion
+const generating = new Set(); // répliques en cours de génération (text-to-speech)
 let localFound = {};
 let cur = 0;                 // index de séquence ; -1 = les voix ; -2 = mode d'emploi ; -3 = comptes ; -9 = accueil
 let filter = "ALL";
@@ -325,16 +333,20 @@ function takesHtml(l){
   const conv = canConvert(l.ch);
   return '<div class="takes">' + list.map(t => {
     const sel = state.selected[l.id] === t.f;
+    if (t.gen) return '<span class="take ia tts' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
+      '<button class="tp" data-act="play" type="button" title="Générée par ElevenLabs à partir du texte (voix ' + esc(t.gen.v) + ', ' + esc(t.gen.model) + ')">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '<span class="iatag">IA voice</span></button>' +
+      (sel ? "" : '<button class="ts" data-act="select" type="button" title="Retenir cette génération">★</button>') +
+      '<button class="td" data-act="delete" type="button" title="Supprimer cette génération">✕</button></span>';
     const busy = converting.has(t.f);
     let h = '<span class="take' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
       '<button class="tp" data-act="play" type="button" title="Écouter la prise ' + t.t + (t.by ? " (enregistrée par " + esc(t.by) + ")" : "") + '">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '</button>' +
       (sel ? "" : '<button class="ts" data-act="select" type="button" title="Retenir cette prise">★</button>') +
-      (conv && !t.cv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Convertir avec la voix ElevenLabs de ' + esc(voiceFor(l.ch).name) + '">' + (busy ? "…" : "→ IA") + '</button>' : "") +
+      (conv && !t.cv && !t.gen ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Convertir avec la voix ElevenLabs de ' + esc(voiceFor(l.ch).name) + '">' + (busy ? "…" : "→ IA") + '</button>' : "") +
       '<button class="td" data-act="delete" type="button" title="Supprimer cette prise">✕</button></span>';
     if (t.cv){
       const s2 = state.selected[l.id] === t.cv.f;
       h += '<span class="take ia' + (s2 ? " sel" : "") + '" data-file="' + esc(t.cv.f) + '">' +
-        '<button class="tp" data-act="play" type="button" title="Version IA de la prise ' + t.t + ' (voix ' + esc(t.cv.v) + ')">▶ P' + t.t + '·IA</button>' +
+        '<button class="tp" data-act="play" type="button" title="Version IA de la prise ' + t.t + ' (voix ' + esc(t.cv.v) + ')">▶ P' + t.t + '<span class="iatag">IA voice</span></button>' +
         (s2 ? "" : '<button class="ts" data-act="select" type="button" title="Retenir la version IA">★</button>') +
         (conv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Refaire la conversion (voix ' + esc(voiceFor(l.ch).name) + ')">' + (busy ? "…" : "↻") + '</button>' : "") +
         '<button class="td" data-act="delete" type="button" title="Supprimer la version IA">✕</button></span>';
@@ -342,13 +354,20 @@ function takesHtml(l){
     return h;
   }).join("") + "</div>";
 }
+// Bouton « Generate » : la réplique lue par ElevenLabs (text-to-speech) avec la voix IA du personnage.
+function genBtnHtml(l){
+  if (!state.el || !state.el.hasKey || l.kind === "v") return "";
+  const v = voiceFor(l.ch), busy = generating.has(l.id);
+  return '<button class="gen' + (busy ? " busy" : "") + '" data-act="gen" type="button"' + (v ? "" : " disabled") +
+    ' title="' + (v ? "Générer cette réplique avec la voix IA " + esc(v.name) : "Choisissez d'abord une voix IA pour " + esc(CHARS[l.ch].n) + " dans « IA Voice selector »") + '">' + (busy ? "…" : "Generate") + '</button>';
+}
 function lineHtml(l){
   const c = CHARS[l.ch];
   return '<div class="line" data-id="' + l.id + '" tabindex="0">' +
     '<div class="num">' + l.num + '</div>' +
     '<div class="who"><span class="chip" style="--c:' + c.c + '"><i></i>' + esc(c.n) + '</span></div>' +
     '<div class="txt">' + lineText(l) + '<p class="dir">' + esc(l.dir) + '<span class="pg">p.' + l.pg + '</span></p></div>' +
-    '<div class="ctl">' + (ONLINE ? '<div class="recrow"><span class="timer" hidden></span><span class="meter" hidden><i></i></span><button class="rec" data-act="rec" type="button">Rec</button></div>' : "") +
+    '<div class="ctl">' + (ONLINE ? '<div class="recrow"><span class="timer" hidden></span><span class="meter" hidden><i></i></span>' + genBtnHtml(l) + '<button class="rec" data-act="rec" type="button">Rec</button></div>' : "") +
     '<div class="tk">' + takesHtml(l) + '</div></div></div>';
 }
 function renderNav(){
@@ -399,7 +418,7 @@ function renderView(){
   v.innerHTML = '<div class="seqhead"><div class="row1"><h2>' + s.id + " · " + esc(s.t) + '</h2><span class="slug">' + esc(s.slug) + " · " + s.p + '</span></div>' +
     seqCastHtml(cur) +
     '<p class="summary">' + esc(s.s) + '</p><span class="folder">Dossier : ' + s.folder + '</span>' +
-    (ONLINE && state.el.hasKey ? '<div><button class="btn" id="convseq" type="button" title="Convertit la prise retenue de chaque réplique qui n\'a pas encore de version IA">→ Convertir la séquence en voix IA</button></div>' : "") + '</div>' +
+    (ONLINE && state.el.hasKey ? '<div><button class="btn" id="convseq" type="button" title="Convertit la prise retenue de chaque réplique qui n\'a pas encore de version IA">→ Convertir la séquence en voix IA</button> <button class="btn" id="genseq" type="button" title="Génère avec ElevenLabs chaque réplique de la séquence qui n\'a encore aucune prise (sons vocaux exclus)">✦ Generate la séquence</button></div>' : "") + '</div>' +
     '<div class="lines">' + (ls.length ? ls.map(lineHtml).join("") : '<p class="none" style="padding:20px 0">Aucune réplique ne correspond au filtre dans cette séquence.</p>') + "</div>";
   if (focusId && !document.querySelector('.line[data-id="' + focusId + '"]')) focusId = null;
   if (focusId) setFocus(focusId, false);
@@ -445,7 +464,7 @@ function elBoxHtml(){
   const e = state.el;
   const opt = (v, cur, label) => '<option value="' + v + '"' + (v === cur ? " selected" : "") + ">" + label + "</option>";
   let h = '<div class="elbox"><h3>Voix IA · ElevenLabs</h3>' +
-    '<p>Une seule personne joue tous les rôles. Chaque prise peut ensuite être transformée avec la voix ElevenLabs choisie pour son personnage (voice changer) : le jeu, le rythme et les intentions sont gardés, seul le timbre change. La version IA apparaît à côté de la prise (P2·IA), elle devient la prise retenue et part au transfert comme les autres.</p>';
+    '<p>Une seule personne joue tous les rôles. Chaque prise peut ensuite être transformée avec la voix ElevenLabs choisie pour son personnage (voice changer) : le jeu, le rythme et les intentions sont gardés, seul le timbre change. La version IA apparaît à côté de la prise avec l\'étiquette IA voice, elle devient la prise retenue et part au transfert comme les autres. Sans comédien, le bouton « Generate » de chaque réplique la fait lire directement par la voix IA du personnage, à partir du texte.</p>';
   const admin = ME && ME.role === "admin";
   if (!admin){
     h += e.hasKey ? '<p class="hint">La clé et les réglages sont gérés par l\'admin. Vous pouvez choisir la voix de chaque personnage ci-dessous.</p>' : '<p class="hint">L\'admin n\'a pas encore enregistré de clé ElevenLabs.</p>';
@@ -460,6 +479,7 @@ function elBoxHtml(){
       '<label class="field">Stabilité <input type="range" id="elstab" min="0" max="1" step="0.05" value="' + e.stability + '"><span id="elstabv">' + (+e.stability).toFixed(2) + '</span></label>' +
       '<label class="field">Ressemblance <input type="range" id="elsim" min="0" max="1" step="0.05" value="' + e.similarity + '"><span id="elsimv">' + (+e.similarity).toFixed(2) + '</span></label>' +
       '<label class="check"><input type="checkbox" id="elnoise"' + (e.noise ? " checked" : "") + '> Nettoyer le bruit de fond</label></div>' +
+      '<div class="elrow"><label class="field">Generate (texte → voix) <select id="eltts">' + opt("eleven_multilingual_v2", e.tts, "Multilingue v2 · stable") + opt("eleven_v3", e.tts, "v3 · plus expressif") + opt("eleven_flash_v2_5", e.tts, "Flash v2.5 · rapide") + '</select></label></div>' +
       '<p class="hint">Choisissez une voix pour chaque personnage ci-dessous. Si votre offre ElevenLabs ne permet pas le 44,1 ou 48 kHz, la conversion repasse toute seule en 24 kHz.</p>';
   }
   return h + "</div>";
@@ -478,6 +498,7 @@ function reconvTargets(ch){
   const v = voiceFor(ch); if (!v) return [];
   const out = [];
   LINES.filter(l => l.ch === ch).forEach(l => (state.takes[l.id] || []).forEach(t => {
+    if (t.gen) return;
     if (t.cv ? t.cv.vid !== v.id : state.selected[l.id] === t.f) out.push([l.id, t.f]);
   }));
   return out;
@@ -510,11 +531,41 @@ async function convertTake(id, src, quiet){
     return false;
   } finally { converting.delete(src); refreshLine(id); }
 }
+async function generateLine(id, quiet){
+  if (generating.has(id)) return false;
+  const l = BYID[id];
+  const setBtn = () => { const row = document.querySelector('.line[data-id="' + id + '"]'); const b = row && row.querySelector(".gen"); if (b) b.outerHTML = genBtnHtml(l); };
+  generating.add(id); setBtn();
+  try {
+    const j = await api("generate", {line: id});
+    applyState(j);
+    if (!quiet) toast("IA voice générée · " + CHARS[l.ch].n + " " + l.num + " (voix " + j.take.gen.v + ")");
+    return true;
+  } catch(e) {
+    toast("Génération impossible : " + e.message, true);
+    return false;
+  } finally { generating.delete(id); setBtn(); refreshLine(id); }
+}
+async function generateSeq(){
+  const btn = $("#genseq");
+  const all = SEQS[cur].L.map(x => BYID[SEQS[cur].id + "_L" + x[0]]).filter(l => l.kind !== "v" && !hasAudio(l.id));
+  const todo = all.filter(l => voiceFor(l.ch));
+  const noVoice = [...new Set(all.filter(l => !voiceFor(l.ch)).map(l => CHARS[l.ch].n))];
+  if (!todo.length){ toast(noVoice.length ? "Rien à générer. Personnages sans voix IA choisie : " + noVoice.join(", ") + "." : "Toutes les répliques de cette séquence ont déjà une prise."); return; }
+  btn.disabled = true;
+  let ok = 0;
+  for (let i = 0; i < todo.length; i++){
+    if ($("#genseq")) $("#genseq").textContent = "Génération " + (i + 1) + "/" + todo.length + "…";
+    if (await generateLine(todo[i].id, true)) ok++; else break;
+  }
+  if ($("#genseq")){ $("#genseq").disabled = false; $("#genseq").textContent = "✦ Generate la séquence"; }
+  toast(ok + " réplique(s) générée(s) en IA voice." + (noVoice.length ? " Sans voix IA : " + noVoice.join(", ") + "." : ""));
+}
 async function convertSeq(){
   const btn = $("#convseq");
   const todo = SEQS[cur].L.map(x => BYID[SEQS[cur].id + "_L" + x[0]]).filter(l => canConvert(l.ch)).map(l => {
     const t = (state.takes[l.id] || []).find(t => t.f === state.selected[l.id]);
-    return t && !t.cv ? [l.id, t.f] : null;
+    return t && !t.cv && !t.gen ? [l.id, t.f] : null;
   }).filter(Boolean);
   const noVoice = [...new Set(SEQS[cur].L.map(x => x[1]).filter(ch => !voiceFor(ch)))];
   if (!todo.length){ toast(noVoice.length ? "Rien à convertir. Personnages sans voix IA choisie : " + noVoice.map(c => CHARS[c].n).join(", ") + "." : "Toutes les prises retenues de cette séquence ont déjà leur version IA."); return; }
@@ -549,6 +600,7 @@ document.addEventListener("click", async e => {
   }
   const rc = e.target.closest("[data-reconv]"); if (rc){ reconvertChar(rc.dataset.reconv, rc); return; }
   if (e.target.id === "convseq") convertSeq();
+  if (e.target.id === "genseq") generateSeq();
 });
 document.addEventListener("change", async e => {
   const t = e.target;
@@ -558,6 +610,7 @@ document.addEventListener("change", async e => {
     catch(err){ toast(err.message, true); }
   }
   else if (t.id === "elmodel") elSave({model: t.value});
+  else if (t.id === "eltts") elSave({tts: t.value});
   else if (t.id === "elformat") elSave({format: t.value});
   else if (t.id === "elstab") elSave({stability: t.value});
   else if (t.id === "elsim") elSave({similarity: t.value});
@@ -612,11 +665,11 @@ async function sbState(pid){
     SB.from("project_voices").select("*").eq("project", pid)]);
   [tk, sel, meta, sett, voi].forEach(sbCheck);
   const takes = {}, selected = {}, voices = {};
-  tk.data.forEach(r => (takes[r.line] = takes[r.line] || []).push({f: r.f, t: r.t, s: r.s, d: epoch(r.created_at), dur: r.dur, by: r.by_name, cv: r.cv || undefined}));
+  tk.data.forEach(r => (takes[r.line] = takes[r.line] || []).push({f: r.f, t: r.t, s: r.s, d: epoch(r.created_at), dur: r.dur, by: r.by_name, cv: r.cv || undefined, gen: r.gen || undefined}));
   sel.data.forEach(r => selected[r.line] = r.f);
   voi.data.forEach(r => voices[r.ch] = {id: r.voice_id, name: r.voice_name});
   const st = await sbStatus();
-  const c = {model: "eleven_multilingual_sts_v2", format: "wav_44100", stability: 0.5, similarity: 0.75, noise: false, auto: false, ...((sett.data && sett.data.settings) || {})};
+  const c = {model: "eleven_multilingual_sts_v2", format: "wav_44100", stability: 0.5, similarity: 0.75, noise: false, auto: false, tts: "eleven_multilingual_v2", ...((sett.data && sett.data.settings) || {})};
   // URL signées (1 h) pour écouter et transférer les fichiers.
   const now = Date.now() / 1000, files = [];
   tk.data.forEach(r => { files.push(r.f); if (r.cv) files.push(r.cv.f); });
@@ -627,7 +680,7 @@ async function sbState(pid){
     urls.forEach((u, k) => { if (u.signedUrl) SIGNED[pid + "/" + part[k]] = {url: u.signedUrl, exp: now + 3600}; });
   }
   return {ok: true, name: (meta.data && meta.data.name) || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "", takes, selected, updated: 0,
-          el: {hasKey: !!st.elHasKey, keyHint: st.elHint || "", model: c.model, format: c.format, stability: +c.stability, similarity: +c.similarity, noise: !!c.noise, auto: !!c.auto, voices}};
+          el: {hasKey: !!st.elHasKey, keyHint: st.elHint || "", model: c.model, format: c.format, stability: +c.stability, similarity: +c.similarity, noise: !!c.noise, auto: !!c.auto, tts: c.tts, voices}};
 }
 function sbValidate(p){
   if (!p || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(p.id || "")) return "Identifiant de projet invalide.";
@@ -685,7 +738,7 @@ async function sbApi(action, data){
     case "elsettings": {
       const cur = sbCheck(await SB.from("project_settings").select("settings").eq("project", PID).maybeSingle());
       const s = {...((cur && cur.settings) || {})};
-      ["model", "format"].forEach(k => { if (o[k] !== undefined) s[k] = o[k]; });
+      ["model", "format", "tts"].forEach(k => { if (o[k] !== undefined) s[k] = o[k]; });
       ["stability", "similarity"].forEach(k => { if (o[k] !== undefined) s[k] = Math.max(0, Math.min(1, +o[k])); });
       ["noise", "auto"].forEach(k => { if (o[k] !== undefined) s[k] = o[k] === "1"; });
       sbCheck(await SB.from("project_settings").upsert({project: PID, settings: s}));
@@ -698,6 +751,7 @@ async function sbApi(action, data){
     case "elkey": SBST = await sbFn("elkey", {key: o.key}); return {ok: true};
     case "elvoices": return sbFn("elvoices");
     case "convert": { const r = await sbFn("convert", {project: PID, line: o.line, file: o.file}); return {...(await sbState(PID)), cv: r.cv}; }
+    case "generate": { const r = await sbFn("generate", {project: PID, line: o.line}); return {...(await sbState(PID)), take: r.take}; }
     case "aiconfig": case "aikey": case "aimodel": {
       if (action === "aikey") SBST = await sbFn("aikey", {key: o.key});
       else if (action === "aimodel") SBST = await sbFn("aimodel", {model: o.model});
@@ -1453,6 +1507,7 @@ document.addEventListener("click", async e => {
   if (act === "rec") toggleRec(id);
   else if (act === "play") play(id, file);
   else if (act === "convert") convertTake(id, b.dataset.src);
+  else if (act === "gen") generateLine(id);
   else if (act === "select"){ try { applyState(await api("select", {line: id, file})); refreshLine(id); } catch(err) { toast(err.message, true); } }
   else if (act === "delete"){
     if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "✕"; } }, 3000); return; }

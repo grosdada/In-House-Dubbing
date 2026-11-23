@@ -33,7 +33,7 @@ Différences avec l'installation PHP : les collaborateurs créent eux-mêmes leu
 ## 2. Régler les clés (facultatif, mais c'est là que l'appli devient magique)
 
 - **Claude** (Accueil › **Réglages**) : prépare les projets à partir d'un PDF. Il écrit les résumés de séquences, les intentions de jeu et la direction de voix de chaque personnage. Clé à créer sur console.anthropic.com.
-- **ElevenLabs** (dans un projet, onglet **IA Voice selector**) : transforme chaque prise avec la voix choisie pour son personnage. Clé à créer sur elevenlabs.io, avec les permissions de lecture des voix et de voice changer.
+- **ElevenLabs** (dans un projet, onglet **IA Voice selector**) : transforme chaque prise avec la voix choisie pour son personnage. Le bouton **Generate** fait aussi lire une réplique directement par cette voix, à partir du texte. Clé à créer sur elevenlabs.io, avec les permissions de lecture des voix, de voice changer et de text to speech.
 
 Les clés restent sur votre serveur : elles ne sont jamais affichées, jamais envoyées aux navigateurs, et ne font pas partie du code. Les consommations sont décomptées sur vos comptes Claude et ElevenLabs.
 
@@ -49,6 +49,8 @@ Le PDF doit avoir la mise en page standard d'un scénario (en-têtes INT./EXT., 
 ## 4. Choisir les voix IA
 
 Dans le projet, onglet **IA Voice selector** : une voix ElevenLabs par personnage (▶ pour l'écouter). Cochez **Voix IA automatique après chaque prise** pour que chaque prise soit convertie dès son envoi. Si une voix ne convient pas, changez-la : le bouton **↻ Refaire ses prises** reconvertit tout à partir des originaux, qui ne sont jamais écrasés.
+
+Pas encore de comédien ? Le bouton **Generate**, à côté de **Rec**, fait lire la réplique par la voix IA du personnage, à partir du texte du scénario (text to speech). **✦ Generate la séquence** fait de même pour toutes les répliques de la séquence qui n'ont encore aucune prise. Ces générations portent l'étiquette **IA voice**, deviennent la prise retenue et partent au transfert comme les autres. Les sons vocaux (rires, souffles) ne se génèrent pas : ils s'enregistrent. Le modèle de génération se choisit dans **IA Voice selector** (Multilingue v2, v3 plus expressif, Flash v2.5 rapide).
 
 ## 5. Inviter la personne qui fait les voix
 

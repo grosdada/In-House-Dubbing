@@ -177,6 +177,62 @@ Deno.serve(async (req) => {
       return json({ ok: true, cv });
     }
 
+    case "generate": {
+      // Réplique lue par ElevenLabs (text-to-speech) avec la voix IA du personnage ; le texte vient du scénario.
+      const { project, line } = body;
+      if (!PID_RE.test(project || "") || !LINE_RE.test(line || "")) return fail("Requête invalide.");
+      if (!canSee(project)) return fail("Ce projet ne vous est pas ouvert.", 403);
+      const key = await secret("el_key");
+      if (!key) return fail("Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector ».");
+      const { data: pr } = await admin.from("projects").select("data").eq("id", project).maybeSingle();
+      const seq = (pr?.data?.seqs || []).find((q: { id: string }) => q.id === line.slice(0, 5));
+      const L = (seq?.lines || []).find((x: unknown[]) => String(x[0]).padStart(2, "0") === line.slice(7));
+      if (!seq || !L) return fail("Réplique introuvable dans le scénario.", 404);
+      const [, ch, kind, raw] = L as string[];
+      if (kind === "v") return fail("Les sons vocaux ne se génèrent pas : enregistrez-les.");
+      const { data: voice } = await admin.from("project_voices").select("*").eq("project", project).eq("ch", ch).maybeSingle();
+      if (!voice) return fail("Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector ».");
+      const { data: st } = await admin.from("project_settings").select("settings").eq("project", project).maybeSingle();
+      const c = { format: "wav_44100", stability: 0.5, similarity: 0.75, tts: "eleven_multilingual_v2", ...(st?.settings || {}) };
+      const { data: meta } = await admin.from("project_meta").select("name").eq("project", project).maybeSingle();
+      const text = String(raw).split("{NAME}").join(meta?.name || pr?.data?.nameVar?.def || "").trim();
+      if (!text) return fail("Cette réplique est vide.");
+      const model = ["eleven_multilingual_v2", "eleven_v3", "eleven_flash_v2_5"].includes(c.tts) ? c.tts : "eleven_multilingual_v2";
+      let stab = +c.stability;
+      if (model === "eleven_v3") stab = stab < 0.25 ? 0 : stab > 0.75 ? 1 : 0.5;
+      const payload = JSON.stringify({ text, model_id: model, voice_settings: { stability: stab, similarity_boost: +c.similarity } });
+      let format = "", code = 0, buf = new Uint8Array();
+      for (const f of [...new Set([c.format, "wav_24000", "pcm_24000"])]) {
+        format = f;
+        const r = await fetch(`${EL_API}/v1/text-to-speech/${encodeURIComponent(voice.voice_id)}?output_format=${f}`,
+          { method: "POST", headers: { "xi-api-key": key, "Content-Type": "application/json", "Accept": "audio/*" }, body: payload });
+        code = r.status; buf = new Uint8Array(await r.arrayBuffer());
+        if (!(code >= 400 && code < 500 && code !== 401 && /tier|subscription|output_format|plan|format/i.test(new TextDecoder().decode(buf)))) break;
+      }
+      if (code !== 200) return fail(elMessage(code, new TextDecoder().decode(buf)), 502);
+      if (format === "wav_24000" && c.format !== format) await admin.from("project_settings").upsert({ project, settings: { ...(st?.settings || {}), format } });
+      if (format === "pcm_24000") {   // PCM brut 16 bits mono : on ajoute un en-tête WAV
+        const h = new DataView(new ArrayBuffer(44)), n = buf.length, w = (o: number, s: string) => [...s].forEach((x, i) => h.setUint8(o + i, x.charCodeAt(0)));
+        w(0, "RIFF"); h.setUint32(4, 36 + n, true); w(8, "WAVEfmt "); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true);
+        h.setUint32(24, 24000, true); h.setUint32(28, 48000, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true); w(36, "data"); h.setUint32(40, n, true);
+        const out = new Uint8Array(44 + n); out.set(new Uint8Array(h.buffer)); out.set(buf, 44); buf = out;
+      }
+      if (new TextDecoder().decode(buf.slice(0, 4)) !== "RIFF") return fail("ElevenLabs n'a pas renvoyé de WAV.", 502);
+      const br = new DataView(buf.buffer, buf.byteOffset).getUint32(28, true) || 48000;
+      const dur = Math.round(Math.max(0, buf.length - 44) / br * 100) / 100;
+      const { data: last } = await admin.from("takes").select("t").eq("project", project).eq("line", line).order("t", { ascending: false }).limit(1);
+      const t = ((last?.[0]?.t as number) || 0) + 1;
+      const f = `${seq.folder}/${line}_${ch}_T${t}_IA.wav`;
+      if (!FILE_RE.test(f.replace(/_IA\.wav$/, ".wav"))) return fail("Réplique invalide.");
+      const up = await admin.storage.from("takes").upload(`${project}/${f}`, buf, { contentType: "audio/wav", upsert: true });
+      if (up.error) return fail("Impossible d'enregistrer la génération : " + up.error.message, 500);
+      const gen = { v: voice.voice_name, vid: voice.voice_id, model, fmt: format };
+      const ins = await admin.from("takes").insert({ project, line, t, f, s: buf.length, dur, by_name: me.name, gen });
+      if (ins.error) return fail(ins.error.message, 500);
+      await admin.from("selected").upsert({ project, line, f });
+      return json({ ok: true, take: { f, t, s: buf.length, dur, by: me.name, gen } });
+    }
+
     case "userdel": {
       if (body.user === u.user.id) return fail("Vous ne pouvez pas supprimer votre propre compte.");
       const { error } = await admin.auth.admin.deleteUser(body.user);

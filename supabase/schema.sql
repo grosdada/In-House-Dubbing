@@ -57,6 +57,8 @@ create table if not exists public.takes (
   unique (project, f)
 );
 create index if not exists takes_project_idx on public.takes (project);
+-- Prises générées par synthèse vocale (bouton Generate) : voix, modèle, format.
+alter table public.takes add column if not exists gen jsonb;
 create table if not exists public.selected (
   project text not null references public.projects on delete cascade,
   line text not null,

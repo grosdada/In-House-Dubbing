@@ -130,6 +130,7 @@ $CHAR_RE   = '/^[A-Z]{2,20}$/';
 $FILE_RE   = '/^SEQ\d{2}_[a-z0-9-]+\/SEQ\d{2}_L\d{2}_[A-Z]{2,20}_T\d{1,3}(_IA)?\.wav$/';
 $FORMATS   = ['wav_48000', 'wav_44100', 'wav_24000', 'wav_22050', 'wav_16000'];
 $MODELS    = ['eleven_multilingual_sts_v2', 'eleven_english_sts_v2'];
+$TTS       = ['eleven_multilingual_v2', 'eleven_v3', 'eleven_flash_v2_5'];
 
 function project_list() {
   global $DATA;
@@ -195,7 +196,7 @@ function read_pconf($file) {
   $c = jread($file, []);
   unset($c['key']);
   $c += ['model' => 'eleven_multilingual_sts_v2', 'format' => 'wav_44100', 'stability' => 0.5, 'similarity' => 0.75,
-         'noise' => false, 'auto' => false, 'voices' => []];
+         'noise' => false, 'auto' => false, 'voices' => [], 'tts' => 'eleven_multilingual_v2'];
   if (!is_array($c['voices'])) $c['voices'] = [];
   return $c;
 }
@@ -204,16 +205,16 @@ function public_el($c) {
   $k = el_key();
   return ['hasKey' => $k !== '', 'keyHint' => $k !== '' ? substr($k, -4) : '', 'model' => $c['model'], 'format' => $c['format'],
           'stability' => (float)$c['stability'], 'similarity' => (float)$c['similarity'], 'noise' => (bool)$c['noise'],
-          'auto' => (bool)$c['auto'], 'voices' => (object)$c['voices']];
+          'auto' => (bool)$c['auto'], 'voices' => (object)$c['voices'], 'tts' => $c['tts']];
 }
 function public_state($s, $c) {
   return ['ok' => true, 'name' => $s['name'], 'takes' => (object)$s['takes'], 'selected' => (object)$s['selected'],
           'updated' => $s['updated'], 'el' => public_el($c)];
 }
-function el_call($method, $path, $key, $post = null, $timeout = 150) {
+function el_call($method, $path, $key, $post = null, $timeout = 150, $headers = []) {
   $ch = curl_init(EL_API . $path);
   curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 15,
-                          CURLOPT_HTTPHEADER => ['xi-api-key: ' . $key]]);
+                          CURLOPT_HTTPHEADER => array_merge(['xi-api-key: ' . $key], $headers)]);
   if ($method === 'POST') { curl_setopt($ch, CURLOPT_POST, true); curl_setopt($ch, CURLOPT_POSTFIELDS, $post); }
   $body = curl_exec($ch);
   $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -571,6 +572,7 @@ case 'elsettings':
   if (isset($_POST['similarity'])) $c['similarity'] = max(0, min(1, round((float)$_POST['similarity'], 2)));
   if (isset($_POST['noise'])) $c['noise'] = $_POST['noise'] === '1';
   if (isset($_POST['auto'])) $c['auto'] = $_POST['auto'] === '1';
+  if (isset($_POST['tts']) && in_array($_POST['tts'], $TTS, true)) $c['tts'] = $_POST['tts'];
   locked($LOCK, function () use ($PCONF, $c) { jwrite($PCONF, $c); });
   out(['ok' => true, 'el' => public_el($c)]);
 
@@ -629,6 +631,68 @@ case 'convert':
     }
   });
   out(['ok' => true, 'cv' => $cv] + public_state($s, read_pconf($PCONF)));
+
+case 'generate':
+  // Génère une réplique en synthèse vocale (ElevenLabs text-to-speech) avec la voix IA du personnage.
+  // Le texte vient du scénario sur le serveur, jamais du navigateur.
+  @set_time_limit(200);
+  $line = (string)($_POST['line'] ?? '');
+  if (!preg_match($LINE_RE, $line)) out(['ok' => false, 'error' => 'Requête invalide.'], 400);
+  $key = el_key();
+  if ($key === '') out(['ok' => false, 'error' => "Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector »."], 400);
+  $proj = jread("$PD/script.json", []);
+  $seq = null; $L = null;
+  foreach ($proj['seqs'] ?? [] as $q) if (($q['id'] ?? '') === substr($line, 0, 5)) $seq = $q;
+  foreach ($seq['lines'] ?? [] as $x) if (str_pad((string)$x[0], 2, '0', STR_PAD_LEFT) === substr($line, 7)) $L = $x;
+  if (!$seq || !$L) out(['ok' => false, 'error' => 'Réplique introuvable dans le scénario.'], 404);
+  [, $char, $kind, $text] = $L;
+  if ($kind === 'v') out(['ok' => false, 'error' => 'Les sons vocaux ne se génèrent pas : enregistrez-les.'], 400);
+  $folder = (string)$seq['folder'];
+  if (!preg_match($CHAR_RE, (string)$char) || !preg_match($FOLDER_RE, $folder)) out(['ok' => false, 'error' => 'Réplique invalide.'], 400);
+  $c = read_pconf($PCONF);
+  $voice = $c['voices'][$char] ?? null;
+  if (!$voice) out(['ok' => false, 'error' => "Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector »."], 400);
+  $st = read_state($STATE);
+  $nm = $st['name'] !== '' ? $st['name'] : (string)($proj['nameVar']['def'] ?? '');
+  $text = trim(str_replace('{NAME}', $nm, (string)$text));
+  if ($text === '') out(['ok' => false, 'error' => 'Cette réplique est vide.'], 400);
+  $model = in_array($c['tts'], $TTS, true) ? $c['tts'] : 'eleven_multilingual_v2';
+  $stab = (float)$c['stability'];
+  if ($model === 'eleven_v3') $stab = $stab < 0.25 ? 0.0 : ($stab > 0.75 ? 1.0 : 0.5);  // v3 n'accepte que 0, 0,5 ou 1
+  $payload = json_encode(['text' => $text, 'model_id' => $model,
+                          'voice_settings' => ['stability' => $stab, 'similarity_boost' => (float)$c['similarity']]]);
+  $tries = array_values(array_unique([$c['format'], 'wav_24000', 'pcm_24000']));
+  foreach ($tries as $format) {
+    [$code, $body, $err] = el_call('POST', '/v1/text-to-speech/' . rawurlencode($voice['id']) . '?output_format=' . $format, $key,
+                                   $payload, 180, ['Content-Type: application/json', 'Accept: audio/*']);
+    if (!($code >= 400 && $code < 500 && $code !== 401 && preg_match('/tier|subscription|output_format|plan|format/i', $body))) break;
+  }
+  if ($code !== 200) out(['ok' => false, 'error' => el_message($code, $body, $err)], 502);
+  // Format réservé à une offre supérieure : on retient le 24 kHz pour les fois suivantes.
+  if ($format === 'wav_24000' && $c['format'] !== $format) locked($LOCK, function () use ($PCONF, $format) { $cc = read_pconf($PCONF); $cc['format'] = $format; jwrite($PCONF, $cc); });
+  if ($format === 'pcm_24000') {   // PCM brut 16 bits mono : on lui ajoute un en-tête WAV
+    $n = strlen($body);
+    $body = 'RIFF' . pack('V', 36 + $n) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, 24000, 48000, 2, 16) . 'data' . pack('V', $n) . $body;
+  }
+  if (substr($body, 0, 4) !== 'RIFF') out(['ok' => false, 'error' => "ElevenLabs n'a pas renvoyé de WAV."], 502);
+  $br = unpack('V', substr($body, 28, 4))[1] ?: 48000;
+  $dur = round(max(0, strlen($body) - 44) / $br, 2);
+  @mkdir("$PD/$folder", 0755, true);
+  [$s, $take] = with_state($STATE, $LOCK, function (&$s) use ($line, $folder, $char, $body, $dur, $PD, $ME, $voice, $model, $format) {
+    $list = $s['takes'][$line] ?? [];
+    $n = 1;
+    foreach ($list as $t) $n = max($n, $t['t'] + 1);
+    $rel = "$folder/{$line}_{$char}_T{$n}_IA.wav";
+    if (file_put_contents("$PD/$rel", $body) === false) return null;
+    $take = ['f' => $rel, 't' => $n, 's' => strlen($body), 'd' => time(), 'dur' => $dur, 'by' => $ME['name'],
+             'gen' => ['v' => $voice['name'], 'vid' => $voice['id'], 'model' => $model, 'fmt' => $format]];
+    $list[] = $take;
+    $s['takes'][$line] = $list;
+    $s['selected'][$line] = $rel;
+    return $take;
+  });
+  if (!$take) out(['ok' => false, 'error' => "Impossible d'enregistrer le fichier sur le serveur."], 500);
+  out(['ok' => true, 'take' => $take] + public_state($s, read_pconf($PCONF)));
 
 default:
   out(['ok' => false, 'error' => 'Action inconnue.'], 400);
