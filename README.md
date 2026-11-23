@@ -2,7 +2,10 @@
 
 Outil web pour enregistrer des **voix maquettes** réplique par réplique, projet par projet, puis les transformer avec le **voice changer d'ElevenLabs** et les récupérer sur son PC pour l'animatique.
 
-Une page HTML et une API PHP. Aucune base de données : tout est stocké en fichiers dans `data/`.
+Une seule page HTML, qui fonctionne de deux façons :
+
+- **Mode PHP** : avec `api.php` sur n'importe quel hébergement PHP 8. Aucune base de données, tout est stocké en fichiers dans `data/`.
+- **Mode Supabase** : sans serveur. La page (hébergeable gratuitement) s'appuie sur un projet Supabase pour les comptes, la base et le stockage des prises, et sur une petite fonction (`supabase/functions/ihd`) qui garde les clés API. Il suffit de poser un `supabase-config.js` à côté de la page.
 
 ## Fonctions
 
@@ -15,7 +18,9 @@ Une page HTML et une API PHP. Aucune base de données : tout est stocké en fich
 
 Pour démarrer pas à pas, voir **[GUIDE.md](GUIDE.md)**.
 
-## Installation
+## Installation (mode PHP)
+
+Pour le mode Supabase, suivez la partie « B » de [GUIDE.md](GUIDE.md).
 
 1. Copier `index.html`, `api.php` et `.htaccess` dans un dossier servi en HTTPS par PHP 8 (avec l'extension curl).
 2. Copier `config.sample.php` en `config.php` et y mettre une `setup_key` longue et aléatoire.

@@ -268,6 +268,7 @@ const store = {get(k){try{return localStorage.getItem("ihd-"+PID+"-"+k)}catch(e)
 function toast(msg, err){ const t = $("#toast"); t.textContent = msg; t.className = "toast" + (err ? " err" : ""); t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, err ? 6000 : 2600); }
 
 async function api(action, data){
+  if (SB) return sbApi(action, data);
   let url = "api.php?action=" + action + (PID ? "&p=" + encodeURIComponent(PID) : "");
   let opt = {cache: "no-store"};
   if (data){ const fd = data instanceof FormData ? data : new FormData(); if (!(data instanceof FormData)) for (const k in data) fd.append(k, data[k]); opt = {method: "POST", body: fd}; }
@@ -287,6 +288,7 @@ function canConvert(ch){ return ONLINE && state.el && state.el.hasKey && !!voice
 
 function hasAudio(id){ return ONLINE ? !!(state.takes[id] && state.takes[id].length) : !!localFound[id]; }
 function audioUrl(id, file){
+  if (SB){ const s = SIGNED[PID + "/" + (file || state.selected[id])]; return s ? s.url : ""; }
   if (ONLINE) return "api.php?action=audio&p=" + encodeURIComponent(PID) + "&f=" + encodeURIComponent(file || state.selected[id]);
   return localFound[id];
 }
@@ -550,8 +552,240 @@ document.addEventListener("input", e => {
   if (e.target.id === "elsim") $("#elsimv").textContent = (+e.target.value).toFixed(2);
 });
 
+/* ================== MODE SUPABASE ==================
+   Si un fichier supabase-config.js est posé à côté de la page, l'appli utilise Supabase
+   (comptes, base, stockage des prises, fonction « ihd ») au lieu de api.php.
+   sbApi() répond exactement comme api.php, le reste de la page ne voit pas la différence. */
+let SB = null, SBST = null;          // client Supabase, état des clés (fonction ihd)
+const SIGNED = {};                   // URL signées des fichiers audio : "projet/fichier" -> {url, exp}
+const SBLIB = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
+function loadScript(src){ return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error("Chargement impossible : " + src)); document.head.appendChild(s); }); }
+async function detectSupabase(){
+  try { await loadScript("supabase-config.js"); } catch(e) { return false; }
+  const c = window.IHD_SUPABASE;
+  if (!c || !c.url || !c.anonKey) return false;
+  if (!window.supabase) await loadScript(SBLIB);
+  SB = window.supabase.createClient(c.url, c.anonKey);
+  SB.auth.onAuthStateChange(ev => { if (ev === "PASSWORD_RECOVERY") showGateSB("recovery"); });
+  return true;
+}
+const fdObj = d => { if (!(d instanceof FormData)) return d || {}; const o = {}; for (const [k, v] of d.entries()) o[k] = v; return o; };
+const sbCheck = r => { if (r.error) throw new Error(r.error.message); return r.data; };
+async function sbFn(action, payload){
+  const {data, error} = await SB.functions.invoke("ihd", {body: {action, ...(payload || {})}});
+  if (error){ let msg = error.message; try { const j = await error.context.json(); msg = j.error || msg; } catch(e) {} throw new Error(msg); }
+  if (!data || !data.ok) throw new Error((data && data.error) || "La fonction « ihd » a répondu de façon inattendue.");
+  return data;
+}
+async function sbStatus(force){ if (!SBST || force){ try { SBST = await sbFn("status"); } catch(e) { SBST = {elHasKey: false, aiHasKey: false, aiModels: {}, fnError: e.message}; } } return SBST; }
+const epoch = t => t ? Math.floor(new Date(t).getTime() / 1000) : 0;
+async function sbMe(){
+  const {data: {session}} = await SB.auth.getSession();
+  if (!session) return {ok: true, needsSetup: false, user: null};
+  const p = sbCheck(await SB.from("profiles").select("*").eq("id", session.user.id).maybeSingle());
+  if (!p) return {ok: true, user: null};
+  return {ok: true, user: {id: p.id, name: p.name || p.email, email: p.email, role: p.role, projects: p.projects || []}};
+}
+async function sbState(pid){
+  const [tk, sel, meta, sett, voi] = await Promise.all([
+    SB.from("takes").select("*").eq("project", pid).order("t"),
+    SB.from("selected").select("*").eq("project", pid),
+    SB.from("project_meta").select("*").eq("project", pid).maybeSingle(),
+    SB.from("project_settings").select("*").eq("project", pid).maybeSingle(),
+    SB.from("project_voices").select("*").eq("project", pid)]);
+  [tk, sel, meta, sett, voi].forEach(sbCheck);
+  const takes = {}, selected = {}, voices = {};
+  tk.data.forEach(r => (takes[r.line] = takes[r.line] || []).push({f: r.f, t: r.t, s: r.s, d: epoch(r.created_at), dur: r.dur, by: r.by_name, cv: r.cv || undefined}));
+  sel.data.forEach(r => selected[r.line] = r.f);
+  voi.data.forEach(r => voices[r.ch] = {id: r.voice_id, name: r.voice_name});
+  const st = await sbStatus();
+  const c = {model: "eleven_multilingual_sts_v2", format: "wav_44100", stability: 0.5, similarity: 0.75, noise: false, auto: false, ...((sett.data && sett.data.settings) || {})};
+  // URL signées (1 h) pour écouter et transférer les fichiers.
+  const now = Date.now() / 1000, files = [];
+  tk.data.forEach(r => { files.push(r.f); if (r.cv) files.push(r.cv.f); });
+  const need = files.filter(f => !SIGNED[pid + "/" + f] || SIGNED[pid + "/" + f].exp < now + 600);
+  for (let i = 0; i < need.length; i += 200){
+    const part = need.slice(i, i + 200);
+    const urls = sbCheck(await SB.storage.from("takes").createSignedUrls(part.map(f => pid + "/" + f), 3600));
+    urls.forEach((u, k) => { if (u.signedUrl) SIGNED[pid + "/" + part[k]] = {url: u.signedUrl, exp: now + 3600}; });
+  }
+  return {ok: true, name: (meta.data && meta.data.name) || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "", takes, selected, updated: 0,
+          el: {hasKey: !!st.elHasKey, keyHint: st.elHint || "", model: c.model, format: c.format, stability: +c.stability, similarity: +c.similarity, noise: !!c.noise, auto: !!c.auto, voices}};
+}
+function sbValidate(p){
+  if (!p || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(p.id || "")) return "Identifiant de projet invalide.";
+  if (!p.title || !p.chars || !Array.isArray(p.seqs) || !p.seqs.length) return "Fichier de projet incomplet (titre, personnages, séquences).";
+  for (const s of p.seqs) for (const l of s.lines || []) if (!p.chars[l[1]]) return "Personnage inconnu : " + l[1];
+  return null;
+}
+async function sbApi(action, data){
+  const o = fdObj(data);
+  switch (action){
+    case "me": return sbMe();
+    case "projects": {
+      const ps = sbCheck(await SB.from("projects").select("id,num,data").order("num"));
+      const tk = sbCheck(await SB.from("takes").select("project,line"));
+      const done = {}; tk.forEach(r => (done[r.project] = done[r.project] || new Set()).add(r.line));
+      return {ok: true, projects: ps.map(p => ({id: p.id, num: p.num, title: p.data.title, subtitle: p.data.subtitle || "", seqs: (p.data.seqs || []).length,
+        lines: (p.data.seqs || []).reduce((a, s) => a + (s.lines || []).length, 0), done: done[p.id] ? done[p.id].size : 0, chars: Object.keys(p.data.chars || {}).length}))};
+    }
+    case "script": return {ok: true, project: sbCheck(await SB.from("projects").select("data").eq("id", PID).single()).data};
+    case "state": return sbState(PID);
+    case "projectimport": {
+      const p = JSON.parse(await o.file.text());
+      const err = sbValidate(p); if (err) throw new Error(err);
+      const old = sbCheck(await SB.from("projects").select("num").eq("id", p.id).maybeSingle());
+      const count = sbCheck(await SB.from("projects").select("id")).length;
+      p.num = p.num || (old ? old.num : count + 1);
+      sbCheck(await SB.from("projects").upsert({id: p.id, num: p.num, data: p}));
+      return {ok: true, id: p.id, updated: !!old, migrated: false};
+    }
+    case "upload": {
+      const last = sbCheck(await SB.from("takes").select("t").eq("project", PID).eq("line", o.line).order("t", {ascending: false}).limit(1));
+      const n = (last.length ? last[0].t : 0) + 1;
+      const f = o.folder + "/" + o.line + "_" + o.char + "_T" + n + ".wav";
+      sbCheck(await SB.storage.from("takes").upload(PID + "/" + f, o.audio, {contentType: "audio/wav"}));
+      sbCheck(await SB.from("takes").insert({project: PID, line: o.line, t: n, f, s: o.audio.size, dur: +o.dur, by_name: ME.name}));
+      sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f}));
+      return {...(await sbState(PID)), take: {f, t: n, s: o.audio.size, dur: +o.dur, by: ME.name}};
+    }
+    case "select": sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: o.file})); return sbState(PID);
+    case "delete": {
+      const rows = sbCheck(await SB.from("takes").select("*").eq("project", PID).eq("line", o.line).order("t"));
+      const trash = async rel => { await SB.storage.from("takes").move(PID + "/" + rel, PID + "/_corbeille/" + Date.now() + "_" + rel.split("/")[1]); };
+      const orig = rows.find(r => r.f === o.file), cvRow = rows.find(r => r.cv && r.cv.f === o.file);
+      let keep = rows;
+      if (orig){ await trash(orig.f); if (orig.cv) await trash(orig.cv.f); sbCheck(await SB.from("takes").delete().eq("id", orig.id)); keep = rows.filter(r => r !== orig); }
+      else if (cvRow){ await trash(o.file); sbCheck(await SB.from("takes").update({cv: null}).eq("id", cvRow.id)); keep = rows.map(r => r === cvRow ? {...r, cv: null} : r); }
+      const sel = sbCheck(await SB.from("selected").select("f").eq("project", PID).eq("line", o.line).maybeSingle());
+      if (!keep.some(r => sel && (r.f === sel.f || (r.cv && r.cv.f === sel.f)))){
+        if (keep.length) sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: keep[keep.length - 1].f}));
+        else sbCheck(await SB.from("selected").delete().eq("project", PID).eq("line", o.line));
+      }
+      return sbState(PID);
+    }
+    case "name": sbCheck(await SB.from("project_meta").upsert({project: PID, name: o.name})); return sbState(PID);
+    case "elsettings": {
+      const cur = sbCheck(await SB.from("project_settings").select("settings").eq("project", PID).maybeSingle());
+      const s = {...((cur && cur.settings) || {})};
+      ["model", "format"].forEach(k => { if (o[k] !== undefined) s[k] = o[k]; });
+      ["stability", "similarity"].forEach(k => { if (o[k] !== undefined) s[k] = Math.max(0, Math.min(1, +o[k])); });
+      ["noise", "auto"].forEach(k => { if (o[k] !== undefined) s[k] = o[k] === "1"; });
+      sbCheck(await SB.from("project_settings").upsert({project: PID, settings: s}));
+      return {ok: true, el: (await sbState(PID)).el};
+    }
+    case "elmap":
+      if (o.id) sbCheck(await SB.from("project_voices").upsert({project: PID, ch: o.char, voice_id: o.id, voice_name: o.name}));
+      else sbCheck(await SB.from("project_voices").delete().eq("project", PID).eq("ch", o.char));
+      return {ok: true, el: (await sbState(PID)).el};
+    case "elkey": SBST = await sbFn("elkey", {key: o.key}); return {ok: true};
+    case "elvoices": return sbFn("elvoices");
+    case "convert": { const r = await sbFn("convert", {project: PID, line: o.line, file: o.file}); return {...(await sbState(PID)), cv: r.cv}; }
+    case "aiconfig": case "aikey": case "aimodel": {
+      if (action === "aikey") SBST = await sbFn("aikey", {key: o.key});
+      else if (action === "aimodel") SBST = await sbFn("aimodel", {model: o.model});
+      else await sbStatus(true);
+      if (SBST.fnError) throw new Error("La fonction « ihd » ne répond pas : " + SBST.fnError + " Vérifiez qu'elle est déployée (voir GUIDE.md).");
+      return {ok: true, ai: {hasKey: !!SBST.aiHasKey, keyHint: SBST.aiHint || "", model: SBST.aiModel, models: SBST.aiModels}};
+    }
+    case "claude": return sbFn("claude", o);
+    case "users": {
+      const us = sbCheck(await SB.from("profiles").select("*").order("created_at"));
+      const ps = sbCheck(await SB.from("projects").select("id,num,data").order("num"));
+      return {ok: true, users: us.map(u => ({id: u.id, name: u.name || u.email, email: u.email, role: u.role, created: epoch(u.created_at), projects: u.projects || []})),
+              allProjects: ps.map(p => ({id: p.id, title: p.data.title}))};
+    }
+    case "userprojects": sbCheck(await SB.from("profiles").update({projects: (o.projects || "").split(",").filter(Boolean)}).eq("id", o.user)); return {ok: true};
+    case "userrole": sbCheck(await SB.from("profiles").update({role: o.role}).eq("id", o.user)); return {ok: true};
+    case "userdel": return sbFn("userdel", {user: o.user});
+    case "userreset": sbCheck(await SB.auth.resetPasswordForEmail(o.email, {redirectTo: location.origin + location.pathname})); return {ok: true};
+    case "mypass": {
+      if ((o.new || "").length < 8) throw new Error("Nouveau mot de passe : au moins 8 caractères.");
+      sbCheck(await SB.auth.updateUser({password: o.new})); return {ok: true};
+    }
+  }
+  throw new Error("Action non disponible avec Supabase : " + action);
+}
+function showGateSB(mode){
+  const g = $("#gate"); g.hidden = false;
+  const m = {login: "Se connecter", signup: "Créer un compte", pending: "", recovery: "Choisir un nouveau mot de passe"}[mode];
+  let h = '<form id="gateform" autocomplete="on"><div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>';
+  if (mode === "pending"){
+    g.innerHTML = h + '<p>Votre compte est créé. Il attend la validation de l\'admin, qui vous ouvrira les projets sur lesquels vous travaillez.</p><div class="err" id="g-err"></div><button class="btn gold" type="button" id="g-recheck">Vérifier à nouveau</button><button class="btn" type="button" id="g-out">Se déconnecter</button></form>';
+    $("#g-recheck").onclick = async () => { const me = await sbMe(); if (me.user && me.user.role !== "pending"){ ME = me.user; g.hidden = true; await startApp(); } else $("#g-err").textContent = "Toujours en attente."; };
+    $("#g-out").onclick = async () => { await SB.auth.signOut(); showGateSB("login"); };
+    return;
+  }
+  h += (mode === "signup" ? "<p>Créez votre compte. Le tout premier compte de l'installation devient admin ; les suivants sont validés par l'admin.</p>" : mode === "recovery" ? "<p>Entrez votre nouveau mot de passe.</p>" : "<p>Connectez-vous avec votre adresse e-mail.</p>") +
+    (mode === "signup" ? '<label>Nom affiché<input id="g-name" autocomplete="name" required></label>' : "") +
+    (mode === "recovery" ? "" : '<label>Adresse e-mail<input id="g-user" type="email" name="email" autocomplete="email" required></label>') +
+    '<label>Mot de passe<input id="g-pass" type="password" autocomplete="' + (mode === "login" ? "current-password" : "new-password") + '" required minlength="' + (mode === "login" ? 1 : 8) + '"></label>' +
+    '<div class="err" id="g-err"></div><button class="btn gold" type="submit">' + m + "</button>" +
+    (mode === "login" ? '<button class="btn" type="button" data-gm="signup">Créer un compte</button><button class="btn" type="button" data-gm="forgot">Mot de passe oublié</button>' : mode === "signup" ? '<button class="btn" type="button" data-gm="login">J\'ai déjà un compte</button>' : "") + "</form>";
+  g.innerHTML = h;
+  (g.querySelector("input") || {}).focus && g.querySelector("input").focus();
+  g.querySelectorAll("[data-gm]").forEach(b => b.onclick = async () => {
+    if (b.dataset.gm !== "forgot") return showGateSB(b.dataset.gm);
+    const em = $("#g-user").value.trim(); if (!em){ $("#g-err").textContent = "Entrez d'abord votre adresse e-mail."; return; }
+    const r = await SB.auth.resetPasswordForEmail(em, {redirectTo: location.origin + location.pathname});
+    $("#g-err").textContent = r.error ? r.error.message : "Un lien de réinitialisation vient d'être envoyé à " + em + ".";
+  });
+  $("#gateform").addEventListener("submit", async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector("button[type=submit]"); btn.disabled = true;
+    try {
+      const pass = $("#g-pass").value;
+      if (mode === "recovery"){ sbCheck(await SB.auth.updateUser({password: pass})); }
+      else if (mode === "signup"){
+        const r = sbCheck(await SB.auth.signUp({email: $("#g-user").value.trim(), password: pass, options: {data: {name: $("#g-name").value.trim()}, emailRedirectTo: location.origin + location.pathname}}));
+        if (!r.session){ $("#g-err").textContent = "Compte créé. Confirmez votre adresse avec le lien reçu par e-mail, puis connectez-vous."; btn.disabled = false; return; }
+      } else sbCheck(await SB.auth.signInWithPassword({email: $("#g-user").value.trim(), password: pass}));
+      const me = await sbMe();
+      if (!me.user){ throw new Error("Profil introuvable. Le fichier supabase/schema.sql a-t-il bien été exécuté ?"); }
+      if (me.user.role === "pending") return showGateSB("pending");
+      ME = me.user; g.hidden = true; g.innerHTML = ""; await startApp();
+    } catch(err) { $("#g-err").textContent = err.message; btn.disabled = false; }
+  });
+}
+async function renderAccountsSB(){
+  const v = $("#view");
+  const admin = ME && ME.role === "admin";
+  let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>') + '<div class="seqhead"><h2>' + (admin ? "Comptes" : "Mon compte") + '</h2><p class="summary">' +
+    (admin ? "Les collaborateurs créent eux-mêmes leur compte sur la page de connexion (« Créer un compte »). Ils apparaissent ici « en attente » : validez-les et cochez les projets qu'ils peuvent voir." : "Connecté en tant que <b>" + esc(ME.name) + "</b> (" + esc(ME.email || "") + ").") + '</p></div><div class="acct">';
+  if (admin) h += '<div class="box"><h3>Comptes</h3><div id="a-list"><p class="none">Chargement…</p></div></div>';
+  h += '<div class="box"><h3>Changer mon mot de passe</h3><div class="row"><label>Nouveau mot de passe<input id="m-new" type="password" autocomplete="new-password" minlength="8"></label><button class="btn" type="button" data-sbacct="mypass">Changer</button></div></div></div>';
+  v.innerHTML = h;
+  if (!admin) return;
+  try {
+    const j = await api("users");
+    const boxes = u => j.allProjects.map(p => '<label class="check"><input type="checkbox" data-sbproj="' + esc(p.id) + '" data-uid="' + u.id + '"' + ((u.projects || []).includes(p.id) ? " checked" : "") + "> " + esc(p.title) + "</label>").join("") || '<span class="none">Aucun projet.</span>';
+    $("#a-list").innerHTML = '<table><tr><th>Compte</th><th>Rôle</th><th>Projets</th><th></th></tr>' + j.users.map(u =>
+      "<tr><td>" + esc(u.name) + '<br><span class="label" style="text-transform:none;letter-spacing:0">' + esc(u.email || "") + "</span>" + (u.id === ME.id ? " (vous)" : "") + "</td><td>" +
+      (u.role === "admin" ? "Admin" : u.role === "guest" ? "Invité" : '<b style="color:var(--orb)">En attente</b>') + '</td><td><div class="projs">' + (u.role === "admin" ? '<span class="none">Tous</span>' : boxes(u)) + '</div></td><td class="act">' +
+      (u.id === ME.id ? "" : (u.role === "pending" ? '<button class="btn gold" type="button" data-sbacct="approve" data-uid="' + u.id + '">Valider</button>' : "") +
+        '<button class="btn" type="button" data-sbacct="reset" data-email="' + esc(u.email || "") + '">Lien nouveau mot de passe</button><button class="btn" type="button" data-sbacct="del" data-uid="' + u.id + '">Supprimer</button>') + "</td></tr>").join("") + "</table>";
+  } catch(e) { $("#a-list").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-sbacct]"); if (!b) return;
+  try {
+    const a = b.dataset.sbacct;
+    if (a === "approve"){ await api("userrole", {user: b.dataset.uid, role: "guest"}); toast("Compte validé. Cochez ses projets."); }
+    else if (a === "reset"){ await api("userreset", {email: b.dataset.email}); toast("Lien de réinitialisation envoyé à " + b.dataset.email + "."); return; }
+    else if (a === "del"){ if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer vraiment ?"; return; } await api("userdel", {user: b.dataset.uid}); toast("Compte supprimé. Ses prises restent."); }
+    else if (a === "mypass"){ await api("mypass", {new: $("#m-new").value}); $("#m-new").value = ""; toast("Mot de passe changé."); return; }
+    renderAccountsSB();
+  } catch(err) { toast(err.message, true); }
+});
+document.addEventListener("change", async e => {
+  const t = e.target; if (!t.dataset || !t.dataset.sbproj) return;
+  const projs = [...t.closest("tr").querySelectorAll("[data-sbproj]:checked")].map(x => x.dataset.sbproj).join(",");
+  try { await api("userprojects", {user: t.dataset.uid, projects: projs}); toast("Accès mis à jour."); } catch(err) { toast(err.message, true); t.checked = !t.checked; }
+});
+
 /* ================== COMPTES ================== */
 function showGate(mode){
+  if (SB) return showGateSB(mode === "setup" ? "signup" : mode);
   const g = $("#gate"); g.hidden = false;
   const setup = mode === "setup";
   g.innerHTML = '<form id="gateform" autocomplete="on"><div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>' +
@@ -584,10 +818,11 @@ function showWho(){
 }
 $("#home").addEventListener("click", goHome);
 $("#logout").addEventListener("click", async () => {
-  try { await fetch("api.php?action=logout", {method: "POST"}); } catch(e) {}
+  try { if (SB) await SB.auth.signOut(); else await fetch("api.php?action=logout", {method: "POST"}); } catch(e) {}
   ME = null; showWho(); showGate("login");
 });
 async function renderAccounts(){
+  if (SB) return renderAccountsSB();
   const v = $("#view");
   const admin = ME && ME.role === "admin";
   let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" id="acctback">← Projets</button></div>') + '<div class="seqhead"><h2>' + (admin ? "Comptes" : "Mon compte") + '</h2><p class="summary">' +
@@ -712,11 +947,11 @@ document.addEventListener("change", async e => {
 /* ================== GUIDE ================== */
 function renderGuide(){
   const steps = [
-    ["Installer (une seule fois)", "<p>Il faut un hébergement web avec PHP 8 et HTTPS. Envoyez <code>index.html</code>, <code>api.php</code> et <code>.htaccess</code> dans un dossier du site, copiez <code>config.sample.php</code> en <code>config.php</code> avec une longue clé d'installation au hasard, puis ouvrez <code>…/?k=VOTRE_CLE</code> pour créer le compte admin.</p>"],
+    ["Installer (une seule fois)", "<p><b>Avec un hébergement PHP 8</b> : envoyez <code>index.html</code>, <code>api.php</code> et <code>.htaccess</code> dans un dossier du site, copiez <code>config.sample.php</code> en <code>config.php</code> avec une longue clé d'installation au hasard, puis ouvrez <code>…/?k=VOTRE_CLE</code> pour créer le compte admin.</p><p><b>Sans serveur, avec Supabase</b> (gratuit pour commencer) : créez un projet sur supabase.com, exécutez <code>supabase/schema.sql</code> dans le SQL Editor, déployez la fonction <code>ihd</code>, puis mettez en ligne <code>index.html</code> avec un <code>supabase-config.js</code> (adresse du projet et clé publique). Le premier compte créé devient admin. Le détail est dans GUIDE.md.</p>"],
     ["Régler les clés", "<p><b>Claude</b> (Accueil › Réglages) prépare les projets à partir d'un PDF : résumés, intentions de jeu, directions de voix. <b>ElevenLabs</b> (dans un projet, onglet « Les voix ») transforme les prises avec une voix par personnage. Les clés restent sur le serveur et ne sont jamais affichées ; les consommations sont décomptées sur vos comptes.</p>"],
     ["Créer un projet depuis un scénario", "<p>Accueil › « + Nouveau projet depuis un PDF ». Choisissez le PDF, donnez un titre, cliquez « Analyser ». Avec une clé Claude, « Enrichir avec Claude » ajoute le découpage en séquences de travail, les résumés, les intentions et les sons vocaux. Vérifiez l'aperçu, puis « Créer le projet ». Le PDF doit avoir la mise en page standard d'un scénario et contenir du texte (pas un scan).</p>"],
     ["Choisir les voix IA", "<p>Dans le projet, onglet « Les voix » : une voix ElevenLabs par personnage. Cochez « Voix IA automatique » pour convertir chaque prise dès son envoi. Si une voix ne convient pas, changez-la : « ↻ Refaire ses prises » reconvertit tout à partir des originaux, qui ne sont jamais écrasés.</p>"],
-    ["Inviter la personne qui fait les voix", "<p>Accueil › Comptes › Créer un compte : identifiant, mot de passe et projets ouverts. Envoyez-lui l'adresse de la page (sans <code>?k=</code>), son identifiant et son mot de passe. Elle choisit une séquence, clique sur un personnage sous le titre pour ne voir que ses répliques, et appuie sur Rec (ou Espace) en face de chaque ligne, de préférence avec un casque.</p>"],
+    ["Inviter la personne qui fait les voix", "<p>Accueil › Comptes › Créer un compte : identifiant, mot de passe et projets ouverts, puis envoyez-lui l'adresse de la page (sans <code>?k=</code>), son identifiant et son mot de passe. Avec Supabase, elle crée elle-même son compte sur la page de connexion et vous la validez dans Comptes. Elle choisit une séquence, clique sur un personnage sous le titre pour ne voir que ses répliques, et appuie sur Rec (ou Espace) en face de chaque ligne, de préférence avec un casque.</p>"],
     ["Récupérer les prises", "<p>Dans Chrome ou Edge, ouvrez le projet et cliquez « Transfert audio », puis choisissez le dossier du projet sur votre ordinateur. La prise retenue de chaque réplique arrive dans le dossier de sa séquence (<code>SEQ01_L02_PERSONNAGE.wav</code>), toutes les prises originales et IA dans <code>_prises</code>. Le transfert dépose aussi <code>In-House-Dubbing.html</code> pour réécouter hors ligne.</p>"]
   ];
   $("#view").innerHTML = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>') +
@@ -1302,6 +1537,13 @@ window.addEventListener("resize", syncTop);
   if (ONLINE){
     $("#mode").textContent = "En ligne"; $("#mode").classList.add("on");
     let me = null;
+    if (await detectSupabase()){
+      $("#mode").textContent = "En ligne · Supabase";
+      try { me = await sbMe(); } catch(e) { toast("Supabase injoignable : " + e.message, true); return; }
+      if (!me.user){ showGateSB("login"); return; }
+      if (me.user.role === "pending"){ showGateSB("pending"); return; }
+      ME = me.user; await startApp(); return;
+    }
     try { me = await (await fetch("api.php?action=me", {cache: "no-store"})).json(); } catch(e) { toast("Serveur injoignable.", true); return; }
     if (me.needsSetup){ if (KEY) showGate("setup"); else $("#gate").hidden = false, $("#gate").innerHTML = '<form><h2>In-House-Dubbing</h2><p>Le compte administrateur n\'a pas encore été créé. Ouvrez le lien d\'installation complet.</p></form>'; return; }
     if (!me.user){ showGate("login"); return; }

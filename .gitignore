@@ -5,3 +5,5 @@ config.php
 projects/
 *.wav
 .DS_Store
+# Configuration Supabase propre à chaque installation
+supabase-config.js
