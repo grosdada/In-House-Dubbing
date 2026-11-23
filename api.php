@@ -55,6 +55,22 @@ if ($LEGACY && !is_file($USERS) && is_dir($LEGACY['data'] ?? '')) {
   if (!empty($oc['key']) && !is_file($ELKEY)) jwrite($ELKEY, ['key' => $oc['key']]);
 }
 
+// Reprise des prises d'une ancienne installation mono-projet dans le projet du même identifiant.
+function migrate_legacy_project($pid) {
+  global $LEGACY, $DATA, $ELKEY;
+  $dir = "$DATA/projects/$pid";
+  if (!$LEGACY || ($LEGACY['project'] ?? '') !== $pid || is_file("$dir/state.json") || !is_dir($LEGACY['data'] ?? '')) return false;
+  copy_tree($LEGACY['data'], $dir, ['users.json', 'sessions.json', 'loginfails.json', 'config.json', '.htaccess', '.lock', '.lock-auth',
+                                    'state.json.tmp', 'config.json.tmp', 'api.php.avant-elevenlabs', 'index.html.avant-elevenlabs']);
+  $oc = jread($LEGACY['data'] . '/config.json', []);
+  if (!empty($oc['key']) && el_key() === '') jwrite($ELKEY, ['key' => $oc['key']]);
+  unset($oc['key']);
+  if ($oc) jwrite("$dir/config.json", $oc);
+  return is_file("$dir/state.json");
+}
+// Projet déposé directement sur le serveur (data/projects/<id>/script.json) : reprise au premier passage.
+if ($LEGACY && is_file("$DATA/projects/" . ($LEGACY['project'] ?? '') . '/script.json')) migrate_legacy_project($LEGACY['project']);
+
 /* ---------- comptes et sessions ---------- */
 function cookie_path() { $d = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/'); return $d === '' ? '/' : $d . '/'; }
 function set_session_cookie($value, $expires) {
@@ -296,16 +312,7 @@ case 'projectimport':
   @mkdir($dir, 0755, true);
   if (empty($p['num'])) { $p['num'] = $existed ? (int)(jread("$dir/script.json", [])['num'] ?? 0) : count(project_list()) + 1; }
   jwrite("$dir/script.json", $p);
-  // Reprise des prises d'une ancienne installation mono-projet.
-  $migrated = false;
-  if ($LEGACY && ($LEGACY['project'] ?? '') === $p['id'] && !is_file("$dir/state.json") && is_dir($LEGACY['data'] ?? '')) {
-    copy_tree($LEGACY['data'], $dir, ['users.json', 'sessions.json', 'loginfails.json', 'config.json', '.htaccess', '.lock', '.lock-auth', 'state.json.tmp', 'config.json.tmp']);
-    $oc = jread($LEGACY['data'] . '/config.json', []);
-    if (!empty($oc['key']) && el_key() === '') jwrite($ELKEY, ['key' => $oc['key']]);
-    unset($oc['key']);
-    if ($oc) jwrite("$dir/config.json", $oc);
-    $migrated = is_file("$dir/state.json");
-  }
+  $migrated = migrate_legacy_project($p['id']);
   out(['ok' => true, 'id' => $p['id'], 'updated' => $existed, 'migrated' => $migrated]);
 
 case 'elkey':
