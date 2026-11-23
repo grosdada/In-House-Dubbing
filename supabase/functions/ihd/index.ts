@@ -136,10 +136,10 @@ Deno.serve(async (req) => {
       if (!PID_RE.test(project || "") || !LINE_RE.test(line || "") || !FILE_RE.test(file || "")) return fail("Requête invalide.");
       if (!canSee(project)) return fail("Ce projet ne vous est pas ouvert.", 403);
       const key = await secret("el_key");
-      if (!key) return fail("Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « Les voix ».");
+      if (!key) return fail("Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector ».");
       const ch = (file.match(/_L\d{2}_([A-Z]+)_T/) || [])[1];
       const { data: voice } = await admin.from("project_voices").select("*").eq("project", project).eq("ch", ch).maybeSingle();
-      if (!voice) return fail("Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « Les voix ».");
+      if (!voice) return fail("Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector ».");
       const { data: st } = await admin.from("project_settings").select("settings").eq("project", project).maybeSingle();
       const c = { model: "eleven_multilingual_sts_v2", format: "wav_44100", stability: 0.5, similarity: 0.75, noise: false, ...(st?.settings || {}) };
       const { data: take } = await admin.from("takes").select("*").eq("project", project).eq("f", file).maybeSingle();

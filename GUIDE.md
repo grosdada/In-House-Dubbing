@@ -33,13 +33,13 @@ Différences avec l'installation PHP : les collaborateurs créent eux-mêmes leu
 ## 2. Régler les clés (facultatif, mais c'est là que l'appli devient magique)
 
 - **Claude** (Accueil › **Réglages**) : prépare les projets à partir d'un PDF. Il écrit les résumés de séquences, les intentions de jeu et la direction de voix de chaque personnage. Clé à créer sur console.anthropic.com.
-- **ElevenLabs** (dans un projet, onglet **Les voix**) : transforme chaque prise avec la voix choisie pour son personnage. Clé à créer sur elevenlabs.io, avec les permissions de lecture des voix et de voice changer.
+- **ElevenLabs** (dans un projet, onglet **IA Voice selector**) : transforme chaque prise avec la voix choisie pour son personnage. Clé à créer sur elevenlabs.io, avec les permissions de lecture des voix et de voice changer.
 
 Les clés restent sur votre serveur : elles ne sont jamais affichées, jamais envoyées aux navigateurs, et ne font pas partie du code. Les consommations sont décomptées sur vos comptes Claude et ElevenLabs.
 
 ## 3. Créer un projet à partir d'un scénario
 
-1. Accueil › **+ Nouveau projet depuis un PDF**.
+1. Accueil (ou la boule jaune en haut à gauche) › **+ Add new project**.
 2. Choisissez le PDF, donnez un titre (l'identifiant se remplit tout seul) et cliquez **Analyser le PDF**. L'appli repère les scènes, les personnages et chaque réplique.
 3. Avec une clé Claude, cliquez **Enrichir avec Claude** : découpage en séquences de travail, résumés, intentions, directions de voix, sons vocaux à enregistrer (cris, efforts…).
 4. Vérifiez l'aperçu, puis **Créer le projet**.
@@ -48,7 +48,7 @@ Le PDF doit avoir la mise en page standard d'un scénario (en-têtes INT./EXT., 
 
 ## 4. Choisir les voix IA
 
-Dans le projet, onglet **Les voix** : une voix ElevenLabs par personnage (▶ pour l'écouter). Cochez **Voix IA automatique après chaque prise** pour que chaque prise soit convertie dès son envoi. Si une voix ne convient pas, changez-la : le bouton **↻ Refaire ses prises** reconvertit tout à partir des originaux, qui ne sont jamais écrasés.
+Dans le projet, onglet **IA Voice selector** : une voix ElevenLabs par personnage (▶ pour l'écouter). Cochez **Voix IA automatique après chaque prise** pour que chaque prise soit convertie dès son envoi. Si une voix ne convient pas, changez-la : le bouton **↻ Refaire ses prises** reconvertit tout à partir des originaux, qui ne sont jamais écrasés.
 
 ## 5. Inviter la personne qui fait les voix
 

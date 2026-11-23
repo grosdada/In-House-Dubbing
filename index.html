@@ -34,9 +34,22 @@ button{cursor:pointer}
 .top{position:sticky;top:0;z-index:20;background:rgba(17,19,42,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--rule);
   padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px))}
 .top-in{max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
-.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.brand{position:relative;margin-right:auto;min-width:0}
+.brandbtn{display:flex;align-items:center;gap:12px;background:none;border:0;padding:4px 8px 4px 0;border-radius:6px;text-align:left;min-width:0}
+.brandbtn:hover .orb{box-shadow:0 0 0 2px rgba(226,178,63,.55),0 0 26px rgba(226,178,63,.6)}
+.brandbtn .bt{min-width:0}
+.brandbtn .caret{color:var(--dust);font-size:13px}
+.brandbtn[aria-expanded="true"] .caret{color:var(--orb)}
+.pmenu{position:absolute;top:calc(100% + 6px);left:0;z-index:30;min-width:min(360px,90vw);background:var(--sky-2);border:1px solid var(--rule);border-radius:6px;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:6px;display:flex;flex-direction:column;gap:2px}
+.pmenu button{display:flex;justify-content:space-between;align-items:baseline;gap:14px;text-align:left;background:none;border:0;border-radius:4px;padding:9px 12px;color:var(--hi);font-size:14px}
+.pmenu button:hover,.pmenu button:focus-visible{background:var(--sky-3)}
+.pmenu button[aria-current="true"]{box-shadow:inset 3px 0 0 var(--orb);background:var(--sky-3)}
+.pmenu button small{font-family:var(--mono);font-size:11px;color:var(--dust)}
+.pmenu .new{color:var(--orb);font-weight:600}
+.pmenu hr{border:0;border-top:1px solid var(--rule);margin:4px 2px}
+.castlabel{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--hi);margin-right:2px}
 .orb{width:30px;height:30px;border-radius:50%;flex:none;background:radial-gradient(circle at 34% 30%,#FFF1C4 0,#F0C552 18%,#C98F1E 52%,#6E4B0C 100%);box-shadow:0 0 18px rgba(226,178,63,.45)}
-.brand h1{margin:0;font-family:var(--display);font-weight:400;font-size:20px;color:var(--hi);letter-spacing:.01em;line-height:1}
+.brand h1{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(18px,2.4vw,26px);color:var(--hi);letter-spacing:.01em;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand .label{color:var(--dust);display:block;margin-top:3px}
 .pill{font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:2px;border:1px solid var(--rule);white-space:nowrap}
 .pill.on{border-color:var(--ok);color:var(--ok)}
@@ -199,7 +212,10 @@ button{cursor:pointer}
 
 <header class="top">
   <div class="top-in">
-    <div class="brand"><div class="orb" aria-hidden="true"></div><div><h1>In-House-Dubbing</h1><span class="label" id="projlabel">Projets</span></div></div>
+    <div class="brand">
+      <button class="brandbtn" id="brandbtn" type="button" aria-haspopup="menu" aria-expanded="false" title="Changer de projet"><span class="orb" aria-hidden="true"></span><span class="bt"><h1 id="apptitle">In-House-Dubbing</h1><span class="label" id="projlabel">Projets</span></span><span class="caret" aria-hidden="true">▾</span></button>
+      <div class="pmenu" id="pmenu" role="menu" hidden></div>
+    </div>
     <button class="btn" id="home" type="button" hidden>← Projets</button>
     <span class="pill" id="mode"></span>
     <div class="prog"><span id="progtxt">0 / 0</span><span class="bar"><i id="progbar"></i></span></div>
@@ -208,7 +224,7 @@ button{cursor:pointer}
     <span class="who" id="who" hidden></span><button class="btn" id="logout" type="button" hidden>Déconnexion</button>
   </div>
   <div class="tools">
-    <div class="chips" id="filters"></div>
+    <div class="chips" id="filters" aria-label="Cast"></div>
     <label class="check"><input type="checkbox" id="todo"> Seulement à enregistrer</label>
     <label class="field" id="micfield">Micro <select id="mic"><option value="">Micro par défaut</option></select></label>
     <label class="field" id="namefield"><span id="namelabel">Prénom</span> <input id="name" maxlength="24" autocomplete="off"></label>
@@ -248,7 +264,8 @@ function loadProject(p){
   SEQS.forEach((s, si) => s.L.forEach(l => LINES.push({id: s.id + "_L" + l[0], seq: si, folder: s.folder, num: l[0], ch: l[1], kind: l[2] || "", text: l[3], dir: l[4] || "", pg: l[5] || ""})));
   BYID = Object.fromEntries(LINES.map(l => [l.id, l]));
   document.title = p.title + " · In-House-Dubbing";
-  $("#projlabel").textContent = (p.num ? "Projet " + p.num + " · " : "") + p.title + (p.subtitle ? " · " + p.subtitle : "");
+  $("#apptitle").textContent = p.title;
+  $("#projlabel").textContent = "In-House-Dubbing" + (p.num ? " · Projet " + p.num : "") + (p.subtitle ? " · " + p.subtitle : "");
   const nv = p.nameVar;
   $("#namefield").hidden = !nv || !ONLINE;
   if (nv) $("#namelabel").textContent = nv.label;
@@ -336,12 +353,12 @@ function lineHtml(l){
 }
 function renderNav(){
   const counts = SEQS.map(s => { const ls = s.L.map(x => s.id + "_L" + x[0]); return [ls.filter(hasAudio).length, ls.length]; });
-  let h = '<button type="button" data-nav="-1"' + (cur === -1 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">Les voix</span><span class="c"></span></button>' +
+  let h = '<button type="button" data-nav="-1"' + (cur === -1 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">IA Voice selector</span><span class="c"></span></button>' +
           '<button type="button" data-nav="-2"' + (cur === -2 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">Mode d\'emploi</span><span class="c"></span></button>' +
           (ONLINE && ME ? '<button type="button" data-nav="-3"' + (cur === -3 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + '</span><span class="c"></span></button>' : "") + '<div class="sep"></div>';
   SEQS.forEach((s, i) => { const [a, b] = counts[i]; h += '<button type="button" data-nav="' + i + '"' + (cur === i ? ' aria-current="true"' : "") + '><span class="n">' + s.id + '</span><span class="t">' + esc(s.t) + '</span><span class="c' + (a === b ? " full" : "") + '">' + a + "/" + b + "</span></button>"; });
   $("#nav").innerHTML = h;
-  $("#navsel").innerHTML = '<option value="-1">Les voix</option><option value="-2">Mode d\'emploi</option>' + (ONLINE && ME ? '<option value="-3">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + "</option>" : "") + SEQS.map((s, i) => '<option value="' + i + '">' + s.id + " · " + esc(s.t) + " (" + counts[i][0] + "/" + counts[i][1] + ")</option>").join("");
+  $("#navsel").innerHTML = '<option value="-1">IA Voice selector</option><option value="-2">Mode d\'emploi</option>' + (ONLINE && ME ? '<option value="-3">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + "</option>" : "") + SEQS.map((s, i) => '<option value="' + i + '">' + s.id + " · " + esc(s.t) + " (" + counts[i][0] + "/" + counts[i][1] + ")</option>").join("");
   $("#navsel").value = String(cur);
   const done = LINES.filter(l => hasAudio(l.id)).length;
   $("#progtxt").textContent = done + " / " + LINES.length + " répliques";
@@ -349,7 +366,7 @@ function renderNav(){
 }
 function renderFilters(){
   const keys = ["ALL"].concat(Object.keys(CHARS));
-  $("#filters").innerHTML = keys.map(k => '<button class="fchip" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (k === "ALL" ? "" : ' style="--c:' + CHARS[k].c + '"') + ">" + (k === "ALL" ? "Tous" : "<i></i>" + esc(CHARS[k].n)) + "</button>").join("");
+  $("#filters").innerHTML = '<span class="castlabel">Cast</span>' + keys.map(k => '<button class="fchip" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (k === "ALL" ? "" : ' style="--c:' + CHARS[k].c + '"') + ">" + (k === "ALL" ? "Tous" : "<i></i>" + esc(CHARS[k].n)) + "</button>").join("");
 }
 // Personnages présents dans la séquence, dans l'ordre d'apparition, avec répliques enregistrées / total.
 function seqCastHtml(si){
@@ -369,7 +386,7 @@ function renderView(){
   if (cur === -12){ renderGuide(); return; }
   $("#playseq").hidden = cur < 0;
   if (cur === -1){
-    v.innerHTML = '<div class="seqhead"><h2>Les voix</h2><p class="summary">Une direction générale par personnage. Les intentions précises sont à côté de chaque réplique.</p></div>' +
+    v.innerHTML = '<div class="seqhead"><h2>IA Voice selector</h2><p class="summary">Une direction générale par personnage. Les intentions précises sont à côté de chaque réplique.</p></div>' +
       (ONLINE ? elBoxHtml() : "") + '<div class="voices">' +
       Object.keys(CHARS).map(k => { const n = LINES.filter(l => l.ch === k); return '<div class="voice" style="--c:' + CHARS[k].c + '"><h3><i></i>' + esc(CHARS[k].n) + '</h3><p>' + esc(CHARS[k].v) + '</p><span class="cnt label">' + n.filter(l => hasAudio(l.id)).length + " / " + n.length + ' répliques</span>' + (ONLINE && state.el.hasKey ? voiceSelHtml(k) : "") + '</div>'; }).join("") + "</div>";
     if (ONLINE && state.el.hasKey && !elVoices) loadVoices();
@@ -407,11 +424,11 @@ function helpHtml(){
   "<li>La prise en or est la prise retenue : c'est la dernière par défaut. Cliquez ★ sur une autre pour la retenir à sa place, ✕ deux fois pour supprimer une prise ratée.</li>" +
   "<li>« Lire la séquence » enchaîne les prises retenues dans l'ordre, pour entendre la scène.</li></ol></div>" +
   '<div class="box"><h3>Voix IA (ElevenLabs)</h3><ol>' +
-  "<li>Dans l'onglet <b>Les voix</b>, collez une fois la clé API ElevenLabs. Elle est gardée sur le serveur et n'est plus jamais affichée.</li>" +
-  "<li>Toujours dans <b>Les voix</b>, choisissez une voix ElevenLabs pour chaque personnage (▶ pour l'écouter).</li>" +
+  "<li>Dans l'onglet <b>IA Voice selector</b>, collez une fois la clé API ElevenLabs. Elle est gardée sur le serveur et n'est plus jamais affichée.</li>" +
+  "<li>Toujours dans <b>IA Voice selector</b>, choisissez une voix ElevenLabs pour chaque personnage (▶ pour l'écouter).</li>" +
   "<li>Sur une prise, cliquez <b>→ IA</b> : la version transformée apparaît à côté (P2·IA) et devient la prise retenue. ↻ refait la conversion, par exemple après avoir changé de voix.</li>" +
   "<li>« Convertir la séquence en voix IA » traite d'un coup toutes les prises retenues qui n'ont pas encore leur version IA. La case « Voix IA automatique après chaque prise » convertit chaque nouvelle prise dès son envoi.</li>" +
-  "<li>Les prises originales sont toujours gardées. Si une voix ne convient pas, changez-la dans <b>Les voix</b> : le bouton « ↻ Refaire ses prises » refait toutes les versions IA de ce personnage à partir des originaux, avec la nouvelle voix.</li>" +
+  "<li>Les prises originales sont toujours gardées. Si une voix ne convient pas, changez-la dans <b>IA Voice selector</b> : le bouton « ↻ Refaire ses prises » refait toutes les versions IA de ce personnage à partir des originaux, avec la nouvelle voix.</li>" +
   "<li>Les conversions sont décomptées sur le compte ElevenLabs de la clé.</li></ol></div>" +
   '<div class="box"><h3>Pour récupérer les audios sur le PC</h3><ol>' +
   "<li>Ouvrez le même lien dans Chrome ou Edge, sur le PC.</li>" +
@@ -883,22 +900,46 @@ document.addEventListener("click", async e => {
   } catch(err) { toast(err.message, true); }
 });
 
+/* ================== MENU DES PROJETS (la boule) ================== */
+function closePMenu(){ $("#pmenu").hidden = true; $("#brandbtn").setAttribute("aria-expanded", "false"); }
+async function openPMenu(){
+  if (!ONLINE || !ME){ if (!ONLINE) toast("Hors ligne : ouvrez la version en ligne pour changer de projet."); return; }
+  const m = $("#pmenu"); m.hidden = false; $("#brandbtn").setAttribute("aria-expanded", "true");
+  m.innerHTML = '<span class="none" style="padding:9px 12px">Chargement…</span>';
+  let list = [];
+  try { list = (await api("projects")).projects; } catch(e) { m.innerHTML = '<span class="none" style="padding:9px 12px">' + esc(e.message) + "</span>"; return; }
+  const admin = ME.role === "admin";
+  m.innerHTML = (admin ? '<button type="button" role="menuitem" class="new" data-pm="new">+ Add new project <small>scénario PDF</small></button><hr>' : "") +
+    (list.length ? list.map(p => '<button type="button" role="menuitem" data-pm="' + esc(p.id) + '"' + (p.id === PID ? ' aria-current="true"' : "") + "><span>" + esc(p.title) + "</span><small>" + p.done + "/" + p.lines + "</small></button>").join("") : '<span class="none" style="padding:9px 12px">Aucun projet.</span>') +
+    '<hr><button type="button" role="menuitem" data-pm="home"><span>Tous les projets</span><small>accueil</small></button>';
+  const first = m.querySelector("button"); if (first) first.focus();
+}
+$("#brandbtn").addEventListener("click", e => { e.stopPropagation(); if ($("#pmenu").hidden) openPMenu(); else closePMenu(); });
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-pm]");
+  if (b){ closePMenu(); const v = b.dataset.pm; if (v === "home") goHome(); else if (v === "new"){ if (PID) goHome(); cur = -11; renderView(); window.scrollTo({top: 0}); } else if (v !== PID) openProject(v); return; }
+  if (!e.target.closest("#pmenu")) closePMenu();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#pmenu").hidden){ closePMenu(); $("#brandbtn").focus(); } }, true);
+
 /* ================== ACCUEIL : LES PROJETS ================== */
 async function renderHome(){
   document.title = "In-House-Dubbing";
+  $("#apptitle").textContent = "In-House-Dubbing";
   $("#projlabel").textContent = "Projets";
   const v = $("#view");
   const admin = ME && ME.role === "admin";
   v.innerHTML = '<div class="home"><div class="seqhead"><h2>Projets</h2><p class="summary">' + (admin ? "Chaque projet a son scénario, ses voix IA, ses prises et son dossier sur le PC. Ouvrez un projet, ou importez-en un nouveau (fichier .json préparé à partir du scénario)." : "Les projets qui vous sont ouverts.") + "</p>" +
-    '<div class="elrow">' + (admin ? '<button class="btn gold" type="button" data-homego="-11">+ Nouveau projet depuis un PDF</button><label class="btn" for="pimport" style="display:inline-block">Importer un projet (.json)</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
+    '<div class="elrow">' + (admin ? '<button class="btn gold" type="button" data-homego="-11">+ Add new project</button><label class="btn" for="pimport" style="display:inline-block">Importer un projet (.json)</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
     '<button class="btn" type="button" data-homeacct>' + (admin ? "Comptes" : "Mon compte") + '</button>' + (admin ? '<button class="btn" type="button" data-homego="-10">Réglages</button>' : "") + '<button class="btn" type="button" data-homego="-12">Guide</button></div>' +
     '</div><div class="pgrid" id="pgrid"><p class="none">Chargement…</p></div></div>';
   try {
     const j = await api("projects");
+    if (!$("#pgrid")) return;   // la vue a changé pendant le chargement
     $("#pgrid").innerHTML = j.projects.length ? j.projects.map(p => '<button class="pcard" type="button" data-open="' + esc(p.id) + '"><span class="pn">' + (p.num ? "Projet " + p.num : "Projet") + '</span><h3>' + esc(p.title) + '</h3>' + (p.subtitle ? "<span>" + esc(p.subtitle) + "</span>" : "") +
       '<span class="bar"><i style="width:' + (p.lines ? 100 * p.done / p.lines : 0) + '%"></i></span><span class="meta">' + p.done + " / " + p.lines + " répliques · " + p.seqs + (p.seqs > 1 ? " séquences · " : " séquence · ") + p.chars + (p.chars > 1 ? " personnages" : " personnage") + "</span></button>").join("")
       : '<p class="none">' + (admin ? "Aucun projet pour l'instant. Importez le premier." : "Aucun projet ne vous est encore ouvert. Demandez l'accès à l'admin.") + "</p>";
-  } catch(e) { $("#pgrid").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
+  } catch(e) { if ($("#pgrid")) $("#pgrid").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
 }
 function setChrome(inProject){
   $(".layout").classList.toggle("nonav", !inProject);
@@ -948,9 +989,9 @@ document.addEventListener("change", async e => {
 function renderGuide(){
   const steps = [
     ["Installer (une seule fois)", "<p><b>Avec un hébergement PHP 8</b> : envoyez <code>index.html</code>, <code>api.php</code> et <code>.htaccess</code> dans un dossier du site, copiez <code>config.sample.php</code> en <code>config.php</code> avec une longue clé d'installation au hasard, puis ouvrez <code>…/?k=VOTRE_CLE</code> pour créer le compte admin.</p><p><b>Sans serveur, avec Supabase</b> (gratuit pour commencer) : créez un projet sur supabase.com, exécutez <code>supabase/schema.sql</code> dans le SQL Editor, déployez la fonction <code>ihd</code>, puis mettez en ligne <code>index.html</code> avec un <code>supabase-config.js</code> (adresse du projet et clé publique). Le premier compte créé devient admin. Le détail est dans GUIDE.md.</p>"],
-    ["Régler les clés", "<p><b>Claude</b> (Accueil › Réglages) prépare les projets à partir d'un PDF : résumés, intentions de jeu, directions de voix. <b>ElevenLabs</b> (dans un projet, onglet « Les voix ») transforme les prises avec une voix par personnage. Les clés restent sur le serveur et ne sont jamais affichées ; les consommations sont décomptées sur vos comptes.</p>"],
-    ["Créer un projet depuis un scénario", "<p>Accueil › « + Nouveau projet depuis un PDF ». Choisissez le PDF, donnez un titre, cliquez « Analyser ». Avec une clé Claude, « Enrichir avec Claude » ajoute le découpage en séquences de travail, les résumés, les intentions et les sons vocaux. Vérifiez l'aperçu, puis « Créer le projet ». Le PDF doit avoir la mise en page standard d'un scénario et contenir du texte (pas un scan).</p>"],
-    ["Choisir les voix IA", "<p>Dans le projet, onglet « Les voix » : une voix ElevenLabs par personnage. Cochez « Voix IA automatique » pour convertir chaque prise dès son envoi. Si une voix ne convient pas, changez-la : « ↻ Refaire ses prises » reconvertit tout à partir des originaux, qui ne sont jamais écrasés.</p>"],
+    ["Régler les clés", "<p><b>Claude</b> (Accueil › Réglages) prépare les projets à partir d'un PDF : résumés, intentions de jeu, directions de voix. <b>ElevenLabs</b> (dans un projet, onglet « IA Voice selector ») transforme les prises avec une voix par personnage. Les clés restent sur le serveur et ne sont jamais affichées ; les consommations sont décomptées sur vos comptes.</p>"],
+    ["Créer un projet depuis un scénario", "<p>Accueil, ou la boule jaune en haut à gauche › « + Add new project ». Choisissez le PDF, donnez un titre, cliquez « Analyser ». Avec une clé Claude, « Enrichir avec Claude » ajoute le découpage en séquences de travail, les résumés, les intentions et les sons vocaux. Vérifiez l'aperçu, puis « Créer le projet ». Le PDF doit avoir la mise en page standard d'un scénario et contenir du texte (pas un scan).</p>"],
+    ["Choisir les voix IA", "<p>Dans le projet, onglet « IA Voice selector » : une voix ElevenLabs par personnage. Cochez « Voix IA automatique » pour convertir chaque prise dès son envoi. Si une voix ne convient pas, changez-la : « ↻ Refaire ses prises » reconvertit tout à partir des originaux, qui ne sont jamais écrasés.</p>"],
     ["Inviter la personne qui fait les voix", "<p>Accueil › Comptes › Créer un compte : identifiant, mot de passe et projets ouverts, puis envoyez-lui l'adresse de la page (sans <code>?k=</code>), son identifiant et son mot de passe. Avec Supabase, elle crée elle-même son compte sur la page de connexion et vous la validez dans Comptes. Elle choisit une séquence, clique sur un personnage sous le titre pour ne voir que ses répliques, et appuie sur Rec (ou Espace) en face de chaque ligne, de préférence avec un casque.</p>"],
     ["Récupérer les prises", "<p>Dans Chrome ou Edge, ouvrez le projet et cliquez « Transfert audio », puis choisissez le dossier du projet sur votre ordinateur. La prise retenue de chaque réplique arrive dans le dossier de sa séquence (<code>SEQ01_L02_PERSONNAGE.wav</code>), toutes les prises originales et IA dans <code>_prises</code>. Le transfert dépose aussi <code>In-House-Dubbing.html</code> pour réécouter hors ligne.</p>"]
   ];
@@ -971,7 +1012,7 @@ async function renderSettings(){
     (AI.hasKey ? '<div class="row"><span class="ok">Clé enregistrée (…' + esc(AI.keyHint) + ')</span><button class="btn" type="button" data-ai="del">Retirer la clé</button></div>'
                : '<div class="row"><input type="password" id="aikey" placeholder="Clé API Claude (sk-ant-…)" autocomplete="off" spellcheck="false" style="width:min(380px,100%)"><button class="btn gold" type="button" data-ai="save">Enregistrer la clé</button></div><p class="hint" style="margin:0;font-size:13px">Une clé se crée sur console.anthropic.com, rubrique API Keys.</p>') +
     '<div class="row"><label>Modèle<select id="aimodel">' + models + '</select></label></div></div>' +
-    '<div class="box"><h3>ElevenLabs · voix IA</h3><p class="hint" style="margin:0;font-size:13.5px">La clé ElevenLabs se règle dans un projet, onglet « Les voix ». Elle vaut pour tous les projets de cette installation.</p></div>';
+    '<div class="box"><h3>ElevenLabs · voix IA</h3><p class="hint" style="margin:0;font-size:13.5px">La clé ElevenLabs se règle dans un projet, onglet « IA Voice selector ». Elle vaut pour tous les projets de cette installation.</p></div>';
 }
 document.addEventListener("click", async e => {
   if (e.target.closest("[data-gohome]")){ goHome(); return; }
@@ -1185,7 +1226,7 @@ function buildProject(d, meta, enr){
 function renderImport(){
   const v = $("#view");
   v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>' +
-    '<div class="seqhead"><h2>Nouveau projet depuis un PDF</h2><p class="summary">Déposez le scénario en PDF (mise en page standard : en-têtes de scène, noms des personnages au-dessus des répliques). L\'appli repère les séquences, les personnages et chaque réplique. Avec une clé Claude, elle écrit aussi les résumés, les intentions de jeu et les directions de voix.</p></div>' +
+    '<div class="seqhead"><h2>Add new project</h2><p class="summary">Déposez le scénario en PDF (mise en page standard : en-têtes de scène, noms des personnages au-dessus des répliques). L\'appli repère les séquences, les personnages et chaque réplique. Avec une clé Claude, elle écrit aussi les résumés, les intentions de jeu et les directions de voix.</p></div>' +
     '<div class="acct"><div class="box"><h3>1 · Le scénario</h3><div class="row">' +
     '<label>Fichier PDF<input type="file" id="imp-file" accept="application/pdf,.pdf"></label></div><div class="row">' +
     '<label>Titre du projet<input id="imp-title" placeholder="ex. Mon court métrage"></label>' +
@@ -1391,7 +1432,7 @@ function moveFocus(d){
   setFocus(rows[i].dataset.id);
 }
 document.addEventListener("keydown", e => {
-  if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey || e.altKey || !$("#pmenu").hidden) return;
   if (cur < 0) return;
   if (e.code === "Space" || e.key === "r" || e.key === "R"){ if (!ONLINE) return; e.preventDefault(); if (!focusId) moveFocus(0); if (focusId) toggleRec(focusId); }
   else if (e.key === "ArrowDown" || e.key === "j"){ e.preventDefault(); moveFocus(1); }

@@ -593,14 +593,14 @@ case 'convert':
   $file = (string)($_POST['file'] ?? '');
   if (!preg_match($LINE_RE, $line) || !preg_match($FILE_RE, $file) || substr($file, -7) === '_IA.wav') out(['ok' => false, 'error' => 'Requête invalide.'], 400);
   $key = el_key();
-  if ($key === '') out(['ok' => false, 'error' => "Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « Les voix »."], 400);
+  if ($key === '') out(['ok' => false, 'error' => "Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector »."], 400);
   $c = read_pconf($PCONF);
   $found = null;
   foreach (read_state($STATE)['takes'][$line] ?? [] as $t) if ($t['f'] === $file) $found = $t;
   if (!$found || !is_file("$PD/$file")) out(['ok' => false, 'error' => 'Prise introuvable sur le serveur.'], 404);
   preg_match('/_L\d{2}_([A-Z]+)_T/', $file, $m);
   $voice = $c['voices'][$m[1] ?? ''] ?? null;
-  if (!$voice) out(['ok' => false, 'error' => "Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « Les voix »."], 400);
+  if (!$voice) out(['ok' => false, 'error' => "Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector »."], 400);
   $settings = json_encode(['stability' => (float)$c['stability'], 'similarity_boost' => (float)$c['similarity']]);
   $send = function ($format, $path) use ($c, $PD, $file, $settings, $voice, $key) {
     $post = ['audio' => new CURLFile("$PD/$file", 'audio/wav', basename($file)), 'model_id' => $c['model'],

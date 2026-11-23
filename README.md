@@ -26,7 +26,7 @@ Pour le mode Supabase, suivez la partie « B » de [GUIDE.md](GUIDE.md).
 2. Copier `config.sample.php` en `config.php` et y mettre une `setup_key` longue et aléatoire.
 3. Ouvrir `https://…/?k=VOTRE_SETUP_KEY` et créer le compte admin. Le lien ne sert plus ensuite.
 4. Sur l'accueil, **Importer un projet** (fichier `.json`, voir ci-dessous).
-5. Dans le projet, onglet **Les voix** : coller la clé API ElevenLabs et choisir une voix par personnage.
+5. Dans le projet, onglet **IA Voice selector** : coller la clé API ElevenLabs et choisir une voix par personnage.
 
 Le dossier `data/` est créé automatiquement et interdit au web.
 
