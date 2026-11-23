@@ -182,6 +182,8 @@ button{cursor:pointer}
 .pcard h3{margin:0;font-family:var(--display);font-weight:400;font-size:24px;color:var(--hi);line-height:1.05}
 .pcard .bar{width:100%}
 .pcard .meta{font-family:var(--mono);font-size:12px}
+.acct table{margin-top:4px}
+.acct .chip{font-size:13px}
 .acct .projs{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px}
 .toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--hi);color:var(--sky);padding:10px 16px;border-radius:3px;font-weight:600;font-size:14px;z-index:50;max-width:min(92vw,560px);box-shadow:0 8px 30px rgba(0,0,0,.4)}
 .toast.err{background:var(--rec);color:#fff}
@@ -360,6 +362,9 @@ function seqCastHtml(si){
 function renderView(){
   const v = $("#view");
   if (cur === -9){ renderHome(); return; }
+  if (cur === -10){ renderSettings(); return; }
+  if (cur === -11){ renderImport(); return; }
+  if (cur === -12){ renderGuide(); return; }
   $("#playseq").hidden = cur < 0;
   if (cur === -1){
     v.innerHTML = '<div class="seqhead"><h2>Les voix</h2><p class="summary">Une direction générale par personnage. Les intentions précises sont à côté de chaque réplique.</p></div>' +
@@ -650,8 +655,8 @@ async function renderHome(){
   const v = $("#view");
   const admin = ME && ME.role === "admin";
   v.innerHTML = '<div class="home"><div class="seqhead"><h2>Projets</h2><p class="summary">' + (admin ? "Chaque projet a son scénario, ses voix IA, ses prises et son dossier sur le PC. Ouvrez un projet, ou importez-en un nouveau (fichier .json préparé à partir du scénario)." : "Les projets qui vous sont ouverts.") + "</p>" +
-    '<div class="elrow">' + (admin ? '<label class="btn" for="pimport" style="display:inline-block">Importer un projet (.json)</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
-    '<button class="btn" type="button" data-homeacct>' + (admin ? "Comptes" : "Mon compte") + '</button></div>' +
+    '<div class="elrow">' + (admin ? '<button class="btn gold" type="button" data-homego="-11">+ Nouveau projet depuis un PDF</button><label class="btn" for="pimport" style="display:inline-block">Importer un projet (.json)</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
+    '<button class="btn" type="button" data-homeacct>' + (admin ? "Comptes" : "Mon compte") + '</button>' + (admin ? '<button class="btn" type="button" data-homego="-10">Réglages</button>' : "") + '<button class="btn" type="button" data-homego="-12">Guide</button></div>' +
     '</div><div class="pgrid" id="pgrid"><p class="none">Chargement…</p></div></div>';
   try {
     const j = await api("projects");
@@ -691,6 +696,7 @@ window.addEventListener("popstate", () => { const p = new URLSearchParams(locati
 document.addEventListener("click", e => {
   const o = e.target.closest("[data-open]"); if (o) openProject(o.dataset.open);
   if (e.target.closest("[data-homeacct]")){ cur = -3; renderAccounts(); }
+  const hg = e.target.closest("[data-homego]"); if (hg){ cur = +hg.dataset.homego; renderView(); window.scrollTo({top: 0}); }
 });
 document.addEventListener("change", async e => {
   if (e.target.id !== "pimport" || !e.target.files[0]) return;
@@ -701,6 +707,319 @@ document.addEventListener("change", async e => {
     renderHome();
   } catch(err) { toast(err.message, true); }
   e.target.value = "";
+});
+
+/* ================== GUIDE ================== */
+function renderGuide(){
+  const steps = [
+    ["Installer (une seule fois)", "<p>Il faut un hébergement web avec PHP 8 et HTTPS. Envoyez <code>index.html</code>, <code>api.php</code> et <code>.htaccess</code> dans un dossier du site, copiez <code>config.sample.php</code> en <code>config.php</code> avec une longue clé d'installation au hasard, puis ouvrez <code>…/?k=VOTRE_CLE</code> pour créer le compte admin.</p>"],
+    ["Régler les clés", "<p><b>Claude</b> (Accueil › Réglages) prépare les projets à partir d'un PDF : résumés, intentions de jeu, directions de voix. <b>ElevenLabs</b> (dans un projet, onglet « Les voix ») transforme les prises avec une voix par personnage. Les clés restent sur le serveur et ne sont jamais affichées ; les consommations sont décomptées sur vos comptes.</p>"],
+    ["Créer un projet depuis un scénario", "<p>Accueil › « + Nouveau projet depuis un PDF ». Choisissez le PDF, donnez un titre, cliquez « Analyser ». Avec une clé Claude, « Enrichir avec Claude » ajoute le découpage en séquences de travail, les résumés, les intentions et les sons vocaux. Vérifiez l'aperçu, puis « Créer le projet ». Le PDF doit avoir la mise en page standard d'un scénario et contenir du texte (pas un scan).</p>"],
+    ["Choisir les voix IA", "<p>Dans le projet, onglet « Les voix » : une voix ElevenLabs par personnage. Cochez « Voix IA automatique » pour convertir chaque prise dès son envoi. Si une voix ne convient pas, changez-la : « ↻ Refaire ses prises » reconvertit tout à partir des originaux, qui ne sont jamais écrasés.</p>"],
+    ["Inviter la personne qui fait les voix", "<p>Accueil › Comptes › Créer un compte : identifiant, mot de passe et projets ouverts. Envoyez-lui l'adresse de la page (sans <code>?k=</code>), son identifiant et son mot de passe. Elle choisit une séquence, clique sur un personnage sous le titre pour ne voir que ses répliques, et appuie sur Rec (ou Espace) en face de chaque ligne, de préférence avec un casque.</p>"],
+    ["Récupérer les prises", "<p>Dans Chrome ou Edge, ouvrez le projet et cliquez « Transfert audio », puis choisissez le dossier du projet sur votre ordinateur. La prise retenue de chaque réplique arrive dans le dossier de sa séquence (<code>SEQ01_L02_PERSONNAGE.wav</code>), toutes les prises originales et IA dans <code>_prises</code>. Le transfert dépose aussi <code>In-House-Dubbing.html</code> pour réécouter hors ligne.</p>"]
+  ];
+  $("#view").innerHTML = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>') +
+    '<div class="seqhead"><h2>Guide de démarrage</h2><p class="summary">De l\'installation à la récupération des prises, en six étapes. Les détails sur l\'enregistrement sont dans « Mode d\'emploi », à l\'intérieur de chaque projet.</p></div>' +
+    '<div class="help">' + steps.map((s, i) => '<div class="box"><h3>' + (i + 1) + " · " + s[0] + "</h3>" + s[1] + "</div>").join("") + "</div>";
+}
+
+/* ================== RÉGLAGES (ADMIN) ================== */
+let AI = null;   // {hasKey, keyHint, model, models}
+async function renderSettings(){
+  const v = $("#view");
+  v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div><div class="seqhead"><h2>Réglages</h2><p class="summary">Les clés API sont gardées sur le serveur de cette installation. Elles ne sont jamais affichées ni envoyées aux navigateurs, et ne font pas partie du code : chaque installation a les siennes.</p></div><div class="acct" id="setbox"><p class="none">Chargement…</p></div>';
+  try { AI = (await api("aiconfig")).ai; } catch(e) { $("#setbox").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; return; }
+  const models = Object.entries(AI.models).map(([k, n]) => '<option value="' + k + '"' + (k === AI.model ? " selected" : "") + ">" + esc(n) + "</option>").join("");
+  $("#setbox").innerHTML = '<div class="box"><h3>Claude · préparation des projets</h3>' +
+    '<p class="hint" style="margin:0;font-size:13.5px">Sert à l\'import d\'un scénario PDF : Claude découpe les séquences par temps dramatiques, écrit les résumés, les intentions de jeu sous chaque réplique et la direction de voix de chaque personnage. Facultatif : sans clé, l\'import découpe quand même le scénario, sans ces textes.</p>' +
+    (AI.hasKey ? '<div class="row"><span class="ok">Clé enregistrée (…' + esc(AI.keyHint) + ')</span><button class="btn" type="button" data-ai="del">Retirer la clé</button></div>'
+               : '<div class="row"><input type="password" id="aikey" placeholder="Clé API Claude (sk-ant-…)" autocomplete="off" spellcheck="false" style="width:min(380px,100%)"><button class="btn gold" type="button" data-ai="save">Enregistrer la clé</button></div><p class="hint" style="margin:0;font-size:13px">Une clé se crée sur console.anthropic.com, rubrique API Keys.</p>') +
+    '<div class="row"><label>Modèle<select id="aimodel">' + models + '</select></label></div></div>' +
+    '<div class="box"><h3>ElevenLabs · voix IA</h3><p class="hint" style="margin:0;font-size:13.5px">La clé ElevenLabs se règle dans un projet, onglet « Les voix ». Elle vaut pour tous les projets de cette installation.</p></div>';
+}
+document.addEventListener("click", async e => {
+  if (e.target.closest("[data-gohome]")){ goHome(); return; }
+  const b = e.target.closest("[data-ai]"); if (!b) return;
+  try {
+    if (b.dataset.ai === "save"){ const key = $("#aikey").value.trim(); if (!key) return; b.disabled = true; b.textContent = "Vérification…"; AI = (await api("aikey", {key})).ai; toast("Clé Claude vérifiée et enregistrée."); }
+    else { if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Retirer vraiment ?"; return; } AI = (await api("aikey", {key: ""})).ai; toast("Clé Claude retirée."); }
+  } catch(err) { toast(err.message, true); }
+  renderSettings();
+});
+document.addEventListener("change", async e => {
+  if (e.target.id !== "aimodel") return;
+  try { AI = (await api("aimodel", {model: e.target.value})).ai; toast("Modèle : " + AI.models[AI.model]); } catch(err) { toast(err.message, true); }
+});
+
+/* ================== NOUVEAU PROJET DEPUIS UN PDF ================== */
+const PDFJS_BASE = window.IHD_PDFJS || "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+const PALETTE = ["#6F8FE0","#E8E4DA","#E0533A","#2EC4B6","#9B6BFF","#D9A441","#8C8F7A","#6FBF4A","#F28FB0","#C08A4A","#A7B8D8","#E07BD0","#5FB3E0","#C9D45C","#B07CF0","#7C809E"];
+let IMP = null;   // brouillon d'import en cours
+
+async function loadPdfJs(){
+  if (window.pdfjsLib) return;
+  await new Promise((ok, ko) => { const s = document.createElement("script"); s.src = PDFJS_BASE + "pdf.min.js"; s.onload = ok; s.onerror = () => ko(new Error("Le lecteur PDF n'a pas pu être chargé.")); document.head.appendChild(s); });
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + "pdf.worker.min.js";
+}
+// Lignes du PDF avec leur position (x = retrait, y = hauteur), dans l'ordre de lecture.
+async function pdfLines(file){
+  const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+  const out = [];
+  for (let n = 1; n <= pdf.numPages; n++){
+    const page = await pdf.getPage(n);
+    const tc = await page.getTextContent();
+    const rows = [];
+    for (const it of tc.items){
+      if (!it.str || !it.str.trim()) continue;
+      const x = it.transform[4], y = it.transform[5];
+      let r = rows.find(r => Math.abs(r.y - y) < 2.5);
+      if (!r){ r = {y, items: []}; rows.push(r); }
+      r.items.push({x, w: it.width, s: it.str});
+    }
+    rows.sort((a, b) => b.y - a.y);
+    for (const r of rows){
+      r.items.sort((a, b) => a.x - b.x);
+      let t = "", end = null;
+      for (const it of r.items){ if (end !== null && it.x - end > 1.5 && !t.endsWith(" ")) t += " "; t += it.s; end = it.x + it.w; }
+      out.push({page: n, y: r.y, x: r.items[0].x, text: t.replace(/\s+/g, " ").trim()});
+    }
+  }
+  return out;
+}
+const isCaps = t => /[A-Z]/.test(t) && t === t.toUpperCase();
+const stripParens = t => t.replace(/\([^)]*\)/g, "").trim();
+const charKey = n => { const k = n.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, ""); return k.slice(0, 20); };
+const titleCase = n => n.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+const slugify = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+// Découpe un scénario au format standard : en-têtes de scène, action, personnages, répliques.
+function parseScreenplay(raw){
+  const lines = raw.map(l => ({...l, text: l.text.replace(/\s+\*+$/, "").replace(/^\*+\s+/, "").trim()}))
+    .filter(l => l.text && !/^\*+$/.test(l.text) && !/^\d+\.?$/.test(l.text) && !/Rev\.\s*\(|\(mm\/dd\/yy\)|^\(?MORE\)?$|^CONTINUED:?$|^\(CONTINUED\)$/i.test(l.text));
+  if (!lines.length) throw new Error("Aucun texte lisible dans ce PDF. S'il s'agit d'un scan, il faut d'abord le passer à l'OCR.");
+  const hist = {};
+  lines.filter(l => l.text.length > 35).forEach(l => { const k = Math.round(l.x / 3) * 3; hist[k] = (hist[k] || 0) + 1; });
+  const A = +(Object.entries(hist).sort((a, b) => b[1] - a[1])[0] || [lines[0].x])[0];
+  const gaps = [];
+  for (let i = 1; i < lines.length; i++) if (lines[i].page === lines[i-1].page) gaps.push(lines[i-1].y - lines[i].y);
+  gaps.sort((a, b) => a - b);
+  const lh = gaps[Math.floor(gaps.length * 0.25)] || 12;
+  const SLUG = /^(INT|EXT|INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|I\/E|EST)[.\s]/, SLUG2 = /^(MONTAGE|SERIES OF SHOTS|FLASHBACK|INTERCUT|END MONTAGE)\b/;
+  const items = [];
+  let cur = null, parenOpen = false, prev = null;
+  for (const l of lines){
+    const brk = !prev || prev.page !== l.page || (prev.y - l.y) > lh * 1.5;
+    const ind = l.x - A;
+    prev = l;
+    if (ind < 25 && isCaps(l.text) && (SLUG.test(l.text) || SLUG2.test(l.text))){ items.push({type: "slug", text: l.text, page: l.page}); cur = null; continue; }
+    const bare = stripParens(l.text);
+    if (brk && ind > 95 && ind < 300 && bare && isCaps(bare) && l.text.length < 50 && !/:$/.test(l.text)){
+      cur = {type: "line", cue: bare.replace(/\bCONT[’']?D\b/g, "").replace(/\s+/g, " ").trim(), text: "", paren: [], page: l.page};
+      items.push(cur); parenOpen = false; continue;
+    }
+    if (cur && !brk && ind > 40){
+      if (parenOpen || (l.text.startsWith("(") && !cur.text)){ cur.paren.push(l.text); parenOpen = !l.text.includes(")"); }
+      else if (l.text.startsWith("(") && l.text.endsWith(")")) cur.paren.push(l.text);
+      else cur.text += (cur.text ? " " : "") + l.text;
+      continue;
+    }
+    cur = null; parenOpen = false;
+    if (ind > 280 && isCaps(l.text)) continue;   // transitions (CUT TO:, THE END…)
+    const last = items[items.length - 1];
+    if (!brk && last && last.type === "action") last.text += " " + l.text;
+    else items.push({type: "action", text: l.text, page: l.page});
+  }
+  // Didascalies dans le texte, (comme ceci) : sorties vers les notes.
+  const out = items.filter(it => it.type !== "line" || it.text || it.paren.length).map(it => {
+    if (it.type !== "line") return it;
+    const inl = []; const text = it.text.replace(/\(([^)]*)\)/g, (m, a) => { inl.push(a.trim()); return ""; }).replace(/\s+/g, " ").replace(/\s+([,.!?])/g, "$1").trim();
+    return {...it, text, paren: it.paren.map(p => p.replace(/^\(|\)$/g, "").trim()).concat(inl).filter(Boolean)};
+  }).filter(it => it.type !== "line" || it.text);
+  // Personnages : FRANKLIN et BENJAMIN FRANKLIN sont la même personne.
+  const names = [...new Set(out.filter(i => i.type === "line").map(i => i.cue))];
+  const alias = {};
+  names.forEach(n => { const m = names.filter(o => o !== n && o.endsWith(" " + n)); if (m.length === 1 && !n.includes(" ")) alias[n] = m[0]; });
+  const chars = {}, used = {};
+  let li = 0;
+  out.forEach(it => {
+    if (it.type !== "line") return;
+    it.cue = alias[it.cue] || it.cue;
+    let k = used[it.cue];
+    if (!k){ k = charKey(it.cue) || "PERSO"; let base = k, n = 2; while (Object.values(used).includes(k)) k = base.slice(0, 18) + (n++); used[it.cue] = k; chars[k] = {n: titleCase(it.cue), count: 0, cue: it.cue}; }
+    it.ch = k; chars[k].count++;
+    it.n = ++li;
+  });
+  if (!li) throw new Error("Aucune réplique trouvée. Le PDF n'a peut-être pas la mise en page standard d'un scénario (noms des personnages centrés au-dessus des répliques).");
+  return {items: out, chars, lines: li};
+}
+// Séquences par défaut : une par en-tête de scène (coupée au-delà de 40 répliques).
+function defaultSequences(d){
+  const seqs = []; let curS = null;
+  d.items.forEach(it => {
+    if (it.type === "slug" || !curS){ curS = {title: it.type === "slug" ? it.text : "Ouverture", slug: it.type === "slug" ? it.text : "", lines: [], first: it.page, last: it.page}; seqs.push(curS); if (it.type === "slug") return; }
+    curS.last = it.page;
+    if (it.type === "line") curS.lines.push(it.n);
+  });
+  const outS = [];
+  seqs.filter(s => s.lines.length).forEach(s => { for (let i = 0; i < s.lines.length; i += 40) outS.push({title: s.title + (s.lines.length > 40 ? " (" + (i / 40 + 1) + ")" : ""), slug: s.slug, start: s.lines[i], summary: ""}); });
+  return outS;
+}
+function screenplayText(d, from, to){
+  let t = "";
+  d.items.forEach(it => {
+    if (it.type === "slug") t += "\n### " + it.text + "\n";
+    else if (it.type === "action") t += it.text + "\n";
+    else if ((!from || it.n >= from) && (!to || it.n <= to)) t += "[L" + it.n + "] " + it.cue + (it.paren.length ? " (" + it.paren.join("; ") + ")" : "") + " : " + it.text + "\n";
+  });
+  return t;
+}
+function parseJson(text){
+  const m = text.match(/```(?:json)?\s*([\s\S]*?)```/); const raw = (m ? m[1] : text).trim();
+  const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
+  return JSON.parse(raw.slice(a, b + 1));
+}
+async function claude(system, prompt, max){ const j = await api("claude", {system, prompt, max: String(max)}); return j.text; }
+const SYS = "Tu prépares des sessions d'enregistrement de voix maquettes pour un film d'animation. Tu écris en français, de façon concrète et brève, pour un comédien. Tu réponds uniquement avec du JSON valide, sans aucun texte autour.";
+
+async function enrichWithClaude(d, status){
+  const keys = Object.keys(d.chars).map(k => k + " = " + d.chars[k].cue).join(", ");
+  status("Claude lit le scénario et le découpe en séquences…");
+  const t1 = await claude(SYS, "Voici un scénario. Chaque réplique est numérotée [L1], [L2]…\n\n" + screenplayText(d) +
+    "\n\nPrépare l'enregistrement. Réponds avec ce JSON :\n" +
+    '{"sequences":[{"start":1,"title":"titre court","summary":"2 à 4 phrases : ce qui se passe, qui est là, l\'enjeu"}],' +
+    '"characters":{"CLE":{"name":"nom affiché","voice":"direction de voix : âge, timbre, débit, attitude, en 1 à 3 phrases"}},' +
+    '"vocals":[{"after":12,"char":"CLE","text":"[description courte du son]","dir":"intention"}]}\n\n' +
+    "Règles :\n- sequences : des blocs de travail cohérents de 5 à 25 répliques, coupés aux changements de décor et aux temps dramatiques. start = numéro de la première réplique du bloc ; le premier bloc commence à 1 ; les blocs se suivent dans l'ordre et couvrent toutes les répliques.\n" +
+    "- characters : une entrée par clé, avec exactement ces clés : " + keys + ".\n" +
+    "- vocals : les sons vocaux sans texte décrits dans l'action et qu'il faudra enregistrer (cris, rires, efforts, souffles, chutes de groupe). after = numéro de la réplique juste avant (0 = avant la première). Clé GROUPE pour les sons collectifs.", 12000);
+  const r1 = parseJson(t1);
+  // Contrôle du découpage proposé.
+  let seqs = (r1.sequences || []).filter(s => +s.start >= 1 && +s.start <= d.lines).map(s => ({title: String(s.title || "").slice(0, 80), summary: String(s.summary || ""), start: +s.start}));
+  seqs.sort((a, b) => a.start - b.start);
+  seqs = seqs.filter((s, i) => i === 0 || s.start !== seqs[i-1].start);
+  if (!seqs.length || seqs[0].start !== 1) seqs = defaultSequences(d).map((s, i) => ({...s, summary: (seqs[i] && seqs[i].summary) || ""}));
+  const slugOf = n => { let sl = ""; for (const it of d.items){ if (it.type === "slug") sl = it.text; if (it.n === n) break; } return sl; };
+  seqs.forEach(s => s.slug = slugOf(s.start));
+  Object.entries(r1.characters || {}).forEach(([k, c]) => { if (d.chars[k]){ if (c.name) d.chars[k].n = String(c.name).slice(0, 40); d.chars[k].v = String(c.voice || ""); } });
+  const vocals = (r1.vocals || []).filter(v => v && v.text && +v.after >= 0 && +v.after <= d.lines).map(v => ({after: +v.after, ch: charKey(String(v.char || "GROUPE")) || "GROUPE", text: String(v.text), dir: String(v.dir || "")}));
+  vocals.forEach(v => { if (!d.chars[v.ch]) d.chars[v.ch] = {n: v.ch === "GROUPE" ? "Groupe" : titleCase(v.ch), count: 0, cue: v.ch, v: v.ch === "GROUPE" ? "Sons collectifs : efforts, chutes, cris." : ""}; });
+  // Intentions de jeu, séquence par séquence.
+  const dirs = {};
+  for (let i = 0; i < seqs.length; i++){
+    const from = seqs[i].start, to = i + 1 < seqs.length ? seqs[i+1].start - 1 : d.lines;
+    status("Claude écrit les intentions de jeu · séquence " + (i + 1) + "/" + seqs.length + "…");
+    const t2 = await claude(SYS, "Scénario complet pour le contexte :\n\n" + screenplayText(d, from, to) +
+      "\n\nÉcris l'intention de jeu des répliques [L" + from + "] à [L" + to + "] : une phrase courte par réplique pour le comédien (état, intention, ce qu'il faut appuyer, éventuellement le geste ou la situation). Réponds avec ce JSON : {\"L" + from + "\":\"…\", …}", 6000);
+    try { Object.assign(dirs, parseJson(t2)); } catch(e) {}
+  }
+  return {seqs, vocals, dirs};
+}
+function buildProject(d, meta, enr){
+  const seqDefs = enr ? enr.seqs : defaultSequences(d);
+  const byN = {}; d.items.forEach(it => { if (it.type === "line") byN[it.n] = it; });
+  const seqs = [];
+  seqDefs.forEach((s, i) => {
+    const from = s.start, to = i + 1 < seqDefs.length ? seqDefs[i+1].start - 1 : d.lines;
+    const rows = [];
+    const addVocals = after => (enr ? enr.vocals : []).filter(v => v.after === after).forEach(v => rows.push(["", v.ch, "v", v.text, v.dir, byN[Math.max(1, after)] ? byN[Math.max(1, after)].page : ""]));
+    if (i === 0) addVocals(0);
+    for (let n = from; n <= to; n++){
+      const it = byN[n]; if (!it) continue;
+      const dir = [(enr && enr.dirs["L" + n]) || "", it.paren.length ? "(" + it.paren.join(" ; ") + ")" : ""].filter(Boolean).join(" ");
+      rows.push(["", it.ch, "", it.text, dir, it.page]);
+      addVocals(n);
+    }
+    for (let k = 0; k < rows.length; k += 99) seqs.push({title: s.title + (rows.length > 99 ? " (" + (k / 99 + 1) + ")" : ""), slug: s.slug || "", summary: s.summary || "", rows: rows.slice(k, k + 99)});
+  });
+  if (seqs.length > 99) throw new Error("Plus de 99 séquences : découpez le scénario en plusieurs projets.");
+  const chars = {};
+  Object.keys(d.chars).forEach((k, i) => chars[k] = {n: d.chars[k].n, c: PALETTE[i % PALETTE.length], v: d.chars[k].v || ""});
+  return {
+    id: meta.id, title: meta.title, subtitle: meta.subtitle || "", source: meta.source || "", chars,
+    seqs: seqs.map((s, i) => {
+      const id = "SEQ" + String(i + 1).padStart(2, "0");
+      const pages = [...new Set(s.rows.map(r => r[5]).filter(Boolean))];
+      return {id, folder: id + "_" + (slugify(s.title).slice(0, 28).replace(/-+$/, "") || "sequence"), title: s.title, slug: s.slug,
+        pages: pages.length ? "p." + Math.min(...pages) + (Math.max(...pages) > Math.min(...pages) ? "–" + Math.max(...pages) : "") : "",
+        summary: s.summary, lines: s.rows.map((r, j) => [String(j + 1).padStart(2, "0"), r[1], r[2], r[3], r[4], r[5]])};
+    })
+  };
+}
+
+function renderImport(){
+  const v = $("#view");
+  v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>' +
+    '<div class="seqhead"><h2>Nouveau projet depuis un PDF</h2><p class="summary">Déposez le scénario en PDF (mise en page standard : en-têtes de scène, noms des personnages au-dessus des répliques). L\'appli repère les séquences, les personnages et chaque réplique. Avec une clé Claude, elle écrit aussi les résumés, les intentions de jeu et les directions de voix.</p></div>' +
+    '<div class="acct"><div class="box"><h3>1 · Le scénario</h3><div class="row">' +
+    '<label>Fichier PDF<input type="file" id="imp-file" accept="application/pdf,.pdf"></label></div><div class="row">' +
+    '<label>Titre du projet<input id="imp-title" placeholder="ex. Mon court métrage"></label>' +
+    '<label>Identifiant<input id="imp-id" placeholder="mon-court-metrage" autocapitalize="none" spellcheck="false"></label>' +
+    '<label>Sous-titre (facultatif)<input id="imp-sub" placeholder="ex. Studio · client"></label></div>' +
+    '<div class="row"><button class="btn gold" type="button" id="imp-go">Analyser le PDF</button><span class="hint" id="imp-status" style="font-size:13.5px"></span></div></div>' +
+    '<div id="imp-result"></div></div>';
+}
+function renderDraft(){
+  const d = IMP.draft, p = IMP.project;
+  const ai = AI && AI.hasKey;
+  const nl = p.seqs.reduce((a, s) => a + s.lines.length, 0);
+  $("#imp-result").innerHTML = '<div class="box"><h3>2 · Ce que l\'appli a trouvé</h3>' +
+    '<p style="margin:0">' + p.seqs.length + " séquence(s) · " + Object.keys(p.chars).length + " personnage(s) · " + nl + " réplique(s)" + (IMP.enriched ? " · enrichi par Claude" : "") + "</p>" +
+    '<table><tr><th>Personnage</th><th>Clé</th><th>Répliques</th><th>Voix</th></tr>' + Object.entries(p.chars).map(([k, c]) =>
+      '<tr><td><span class="chip" style="--c:' + c.c + '"><i></i>' + esc(c.n) + '</span></td><td class="label">' + k + "</td><td>" + p.seqs.reduce((a, s) => a + s.lines.filter(l => l[1] === k).length, 0) + '</td><td style="font-size:13px">' + esc(c.v || "—") + "</td></tr>").join("") + "</table>" +
+    '<table><tr><th>Séquence</th><th>Répliques</th><th>Résumé</th></tr>' + p.seqs.map(s => "<tr><td><b>" + s.id + "</b> " + esc(s.title) + "</td><td>" + s.lines.length + '</td><td style="font-size:13px">' + esc(s.summary || "—") + "</td></tr>").join("") + "</table></div>" +
+    '<div class="box"><h3>3 · Finaliser</h3><div class="row">' +
+    (IMP.enriched ? "" : (ai ? '<button class="btn" type="button" id="imp-ai">Enrichir avec Claude (résumés, intentions, voix)</button>' : '<span class="hint" style="font-size:13.5px">Ajoutez une clé Claude dans Réglages pour obtenir les résumés, intentions et directions de voix.</span>')) +
+    '<button class="btn gold" type="button" id="imp-create">Créer le projet</button><button class="btn" type="button" id="imp-dl">Télécharger le .json</button></div>' +
+    '<p class="hint" style="margin:0;font-size:13px">Réimporter plus tard un fichier avec le même identifiant met à jour le scénario sans toucher aux prises.</p></div>';
+}
+document.addEventListener("input", e => {
+  if (e.target.id === "imp-title" && !IMP?.idTouched) $("#imp-id").value = slugify(e.target.value).slice(0, 40);
+  if (e.target.id === "imp-id") (IMP = IMP || {}).idTouched = true;
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "imp-file" && e.target.files[0] && !$("#imp-title").value){ const t = e.target.files[0].name.replace(/\.pdf$/i, "").replace(/[_]+/g, " "); $("#imp-title").value = t; if (!IMP?.idTouched) $("#imp-id").value = slugify(t).slice(0, 40); }
+});
+document.addEventListener("click", async e => {
+  const t = e.target;
+  const status = m => { const s = $("#imp-status"); if (s) s.textContent = m; };
+  if (t.id === "imp-go"){
+    const f = $("#imp-file").files[0];
+    const meta = {title: $("#imp-title").value.trim(), id: $("#imp-id").value.trim(), subtitle: $("#imp-sub").value.trim(), source: f ? f.name : ""};
+    if (!f){ toast("Choisissez d'abord le PDF du scénario.", true); return; }
+    if (!meta.title || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(meta.id)){ toast("Donnez un titre et un identifiant (minuscules, chiffres, tirets).", true); return; }
+    t.disabled = true;
+    try {
+      status("Lecture du PDF…"); await loadPdfJs();
+      const raw = await pdfLines(f);
+      status("Découpe du scénario…");
+      const draft = parseScreenplay(raw);
+      try { AI = (await api("aiconfig")).ai; } catch(err) {}
+      IMP = {...(IMP || {}), draft, meta, enriched: false};
+      IMP.project = buildProject(draft, meta, null);
+      status(""); renderDraft();
+    } catch(err) { status(""); toast(err.message, true); }
+    t.disabled = false;
+  }
+  if (t.id === "imp-ai"){
+    t.disabled = true;
+    try {
+      const enr = await enrichWithClaude(IMP.draft, m => { t.textContent = m; });
+      IMP.project = buildProject(IMP.draft, IMP.meta, enr); IMP.enriched = true; renderDraft(); toast("Projet enrichi par Claude.");
+    } catch(err) { toast("Enrichissement interrompu : " + err.message, true); t.disabled = false; t.textContent = "Réessayer l'enrichissement avec Claude"; }
+  }
+  if (t.id === "imp-dl"){
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(IMP.project, null, 1)], {type: "application/json"})); a.download = IMP.project.id + ".json"; a.click();
+  }
+  if (t.id === "imp-create"){
+    t.disabled = true;
+    try {
+      const fd = new FormData(); fd.append("file", new Blob([JSON.stringify(IMP.project)], {type: "application/json"}), IMP.project.id + ".json");
+      const j = await api("projectimport", fd);
+      toast("Projet « " + IMP.project.title + " » " + (j.updated ? "mis à jour." : "créé."));
+      const id = IMP.project.id; IMP = null; openProject(id);
+    } catch(err) { toast(err.message, true); t.disabled = false; }
+  }
 });
 
 /* ================== LECTURE ================== */

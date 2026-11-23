@@ -12,6 +12,7 @@ $CFG = is_file(__DIR__ . '/config.php') ? (require __DIR__ . '/config.php') : []
 if (!is_array($CFG)) $CFG = [];
 define('SETUP_KEY', (string)($CFG['setup_key'] ?? ''));
 define('EL_API', getenv('EL_API') ?: (string)($CFG['el_api'] ?? 'https://api.elevenlabs.io'));
+define('AI_API', getenv('AI_API') ?: (string)($CFG['ai_api'] ?? 'https://api.anthropic.com'));
 $LEGACY = is_array($CFG['legacy'] ?? null) ? $CFG['legacy'] : null;   // reprise d'une ancienne installation mono-projet
 
 $DATA = __DIR__ . '/data';
@@ -44,6 +45,7 @@ $USERS = "$DATA/users.json";
 $SESS  = "$DATA/sessions.json";
 $FAILS = "$DATA/loginfails.json";
 $ELKEY = "$DATA/el.json";
+$AIKEY = "$DATA/ai.json";
 $ALOCK = "$DATA/.lock-auth";
 
 /* ---------- reprise de l'ancienne installation (comptes + clé ElevenLabs) ---------- */
@@ -234,6 +236,29 @@ function el_message($code, $body, $err) {
   return "ElevenLabs a répondu $code : $m";
 }
 
+/* ---------- Claude (préparation des projets à partir d'un scénario) ---------- */
+$AI_MODELS = ['claude-sonnet-5-5' => 'Claude Sonnet 5.5', 'claude-opus-5-5' => 'Claude Opus 5.5', 'claude-haiku-5-5' => 'Claude Haiku 5.5'];
+function ai_conf() { global $AIKEY; $c = jread($AIKEY, []); return ['key' => (string)($c['key'] ?? ''), 'model' => (string)($c['model'] ?? 'claude-sonnet-5-5')]; }
+function ai_public() { global $AI_MODELS; $c = ai_conf(); return ['hasKey' => $c['key'] !== '', 'keyHint' => $c['key'] !== '' ? substr($c['key'], -4) : '', 'model' => $c['model'], 'models' => $AI_MODELS]; }
+function ai_call($method, $path, $key, $body = null, $timeout = 170) {
+  $ch = curl_init(AI_API . $path);
+  $h = ['x-api-key: ' . $key, 'anthropic-version: 2023-06-01', 'content-type: application/json'];
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_HTTPHEADER => $h]);
+  if ($method === 'POST') { curl_setopt($ch, CURLOPT_POST, true); curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body, JSON_UNESCAPED_UNICODE)); }
+  $resp = curl_exec($ch);
+  $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_error($ch);
+  curl_close($ch);
+  return [$code, (string)$resp, $err];
+}
+function ai_message($code, $body, $err) {
+  if ($err !== '') return "Connexion à l'API Claude impossible : $err";
+  $j = json_decode($body, true);
+  $m = $j['error']['message'] ?? trim(substr(strip_tags($body), 0, 200));
+  if ($code === 401) return "L'API Claude refuse la clé (401). $m";
+  return "L'API Claude a répondu $code : $m";
+}
+
 /* ---------- protection des requêtes d'écriture ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_ORIGIN'])) {
   $oh = parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_HOST);
@@ -292,7 +317,7 @@ case 'logout':
 }
 
 if (!$ME) out(['ok' => false, 'error' => 'Session expirée. Reconnectez-vous.', 'login' => true], 401);
-$ADMIN_ONLY = ['elkey', 'elsettings', 'users', 'useradd', 'userdel', 'userreset', 'userprojects', 'projectimport'];
+$ADMIN_ONLY = ['elkey', 'elsettings', 'users', 'useradd', 'userdel', 'userreset', 'userprojects', 'projectimport', 'aiconfig', 'aikey', 'aimodel', 'claude'];
 if (in_array($action, $ADMIN_ONLY, true) && $ME['role'] !== 'admin') out(['ok' => false, 'error' => "Réservé à l'administrateur."], 403);
 
 /* ---------- actions globales ---------- */
@@ -334,6 +359,43 @@ case 'elvoices':
     $list[] = ['id' => $v['voice_id'] ?? '', 'name' => $v['name'] ?? '?', 'cat' => $v['category'] ?? '', 'preview' => $v['preview_url'] ?? ''];
   usort($list, function ($a, $b) { return strcasecmp($a['name'], $b['name']); });
   out(['ok' => true, 'voices' => $list]);
+
+case 'aiconfig':
+  out(['ok' => true, 'ai' => ai_public()]);
+
+case 'aikey':
+  $key = trim((string)($_POST['key'] ?? ''));
+  $c = ai_conf();
+  if ($key === '') { jwrite($AIKEY, ['key' => '', 'model' => $c['model']]); out(['ok' => true, 'ai' => ai_public()]); }
+  if (!preg_match('/^[A-Za-z0-9_\-]{20,200}$/', $key)) out(['ok' => false, 'error' => "Cette clé n'a pas le format d'une clé API Claude (sk-ant-…)."], 400);
+  [$code, $body, $err] = ai_call('GET', '/v1/models', $key, null, 30);
+  if ($code !== 200) out(['ok' => false, 'error' => ai_message($code, $body, $err)], 400);
+  jwrite($AIKEY, ['key' => $key, 'model' => $c['model']]);
+  out(['ok' => true, 'ai' => ai_public()]);
+
+case 'aimodel':
+  $m = (string)($_POST['model'] ?? '');
+  if (!isset($AI_MODELS[$m])) out(['ok' => false, 'error' => 'Modèle inconnu.'], 400);
+  $c = ai_conf();
+  jwrite($AIKEY, ['key' => $c['key'], 'model' => $m]);
+  out(['ok' => true, 'ai' => ai_public()]);
+
+case 'claude':
+  // Relais vers l'API Claude : la clé reste sur le serveur. Réservé à l'admin.
+  @set_time_limit(200);
+  $c = ai_conf();
+  if ($c['key'] === '') out(['ok' => false, 'error' => "Aucune clé API Claude n'est enregistrée (Accueil › Réglages)."], 400);
+  $system = (string)($_POST['system'] ?? '');
+  $prompt = (string)($_POST['prompt'] ?? '');
+  $max = max(256, min(16000, (int)($_POST['max'] ?? 4000)));
+  if ($prompt === '' || strlen($prompt) > 400000) out(['ok' => false, 'error' => 'Demande vide ou trop longue.'], 400);
+  [$code, $body, $err] = ai_call('POST', '/v1/messages', $c['key'], ['model' => $c['model'], 'max_tokens' => $max, 'system' => $system,
+                                 'messages' => [['role' => 'user', 'content' => $prompt]]]);
+  if ($code !== 200) out(['ok' => false, 'error' => ai_message($code, $body, $err)], 502);
+  $j = json_decode($body, true);
+  $text = '';
+  foreach ($j['content'] ?? [] as $part) if (($part['type'] ?? '') === 'text') $text .= $part['text'];
+  out(['ok' => true, 'text' => $text, 'stop' => $j['stop_reason'] ?? '', 'usage' => $j['usage'] ?? null]);
 
 case 'users':
   $list = [];
