@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>In-House-Dubbing</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><radialGradient id='g' cx='34%25' cy='30%25' r='75%25'><stop offset='0' stop-color='%23FFF1C4'/><stop offset='.18' stop-color='%23F0C552'/><stop offset='.52' stop-color='%23C98F1E'/><stop offset='1' stop-color='%236E4B0C'/></radialGradient></defs><circle cx='32' cy='32' r='30' fill='url%28%23g%29'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -144,6 +145,17 @@ button.gen.busy{opacity:.6;pointer-events:none}
 .take .tp{color:var(--hi)}
 .take.sel{border-color:var(--orb)}
 .take.sel .tp{background:var(--orb);color:#1A1405}
+.take .gtag{font-size:10px;margin-left:5px;padding:0 4px;border-radius:2px;background:var(--sky-3);color:var(--orb);vertical-align:1px}
+.take.sel .gtag{background:#1A1405;color:var(--orb)}
+.gainpop{position:fixed;z-index:60;width:min(340px,92vw);background:var(--sky-2);border:1px solid var(--rule);border-radius:6px;box-shadow:0 14px 40px rgba(0,0,0,.5);padding:12px 14px;display:flex;flex-direction:column;gap:9px;font-size:13px}
+.gainpop h4{margin:0;font-size:13px;font-weight:700;color:var(--hi)}
+.gainpop .gprow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gainpop input[type=range]{flex:1;min-width:0;accent-color:var(--orb)}
+.gainpop #gp-v{font-family:var(--mono);min-width:62px;text-align:right;color:var(--orb)}
+.gainpop .gppeak{margin:0;font-family:var(--mono);font-size:12px;color:var(--dust)}
+.gainpop .gppeak .clip{color:var(--rec)}
+.gainpop .gphint{margin:0;font-size:12px;color:var(--dust)}
+.gainpop .btn{padding:5px 10px;font-size:12.5px}
 .take .ts{border-left:1px solid var(--rule);font-size:13px;line-height:1}
 .take .ts.on{color:var(--orb);cursor:default}
 .take .ts.on.pin{text-shadow:0 0 6px color-mix(in srgb,var(--orb) 60%,transparent)}
@@ -351,7 +363,7 @@ async function api(action, data){
   return j;
 }
 function applyState(j){
-  if (j.takes){ state.name = j.name || state.name; state.takes = j.takes || {}; state.selected = j.selected || {}; state.pinned = j.pinned || {}; }
+  if (j.takes){ state.name = j.name || state.name; state.takes = j.takes || {}; state.selected = j.selected || {}; state.pinned = j.pinned || {}; state.gains = j.gains || {}; }
   if (j.el){ state.el = j.el; $("#autoiafield").hidden = !(ONLINE && state.el.hasKey); $("#autoia").checked = !!state.el.auto; $("#autoia").disabled = !(ME && ME.role === "admin"); $("#autoiafield").title = $("#autoia").disabled ? L("Réglé par l'admin pour tout le monde", "Set by the admin for everyone") : ""; }
 }
 function voiceFor(ch){ return state.el && state.el.voices && state.el.voices[ch]; }
@@ -372,6 +384,116 @@ function lineText(l){
   const t = esc(l.text).split("{NAME}").join("<mark>" + esc(state.name || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "{NAME}") + "</mark>");
   return '<p class="en">' + t + (l.kind === "a" ? '<span class="tag">' + L("adapté", "adapted") + '</span>' : "") + "</p>";
 }
+/* ================== GAIN DES PRISES ==================
+   Gain en dB par fichier, ou par personnage (« @PERSO » : toutes ses prises enregistrées, y compris les suivantes).
+   Appliqué à l'écoute et au transfert ; les fichiers du serveur ne sont jamais modifiés. Clic droit sur une prise. */
+function charOfFile(f){ const m = String(f).match(/_L\d{2}_([A-Z]+)_T\d+(_IA)?\.wav$/); return m ? m[1] : ""; }
+function isRecorded(f){ return /_T\d+\.wav$/.test(f) && !/_IA\.wav$/.test(f); }
+function gainOf(f){
+  const g = state.gains || {};
+  if (f && g[f] !== undefined) return +g[f];
+  if (f && isRecorded(f) && g["@" + charOfFile(f)] !== undefined) return +g["@" + charOfFile(f)];
+  return 0;
+}
+const fmtDb = d => (d > 0 ? "+" : d < 0 ? "−" : "") + Math.abs(d).toFixed(1).replace(/\.0$/, "").replace(".", L(",", ".")) + " dB";
+// WAV PCM 16 bits : position et taille des données, sinon null.
+function wavData(buf){
+  const v = new DataView(buf);
+  if (buf.byteLength < 44 || v.getUint32(0) !== 0x52494646 || v.getUint32(8) !== 0x57415645) return null;
+  let o = 12, fmt = null;
+  while (o + 8 <= buf.byteLength){
+    const id = v.getUint32(o), sz = v.getUint32(o + 4, true);
+    if (id === 0x666d7420) fmt = {format: v.getUint16(o + 8, true), bits: v.getUint16(o + 22, true)};
+    if (id === 0x64617461) return fmt && fmt.format === 1 && fmt.bits === 16 ? {off: o + 8, len: Math.min(sz, buf.byteLength - o - 8) & ~1} : null;
+    o += 8 + sz + (sz & 1);
+  }
+  return null;
+}
+async function peakDb(blob){
+  const buf = await blob.arrayBuffer(), d = wavData(buf); if (!d) return null;
+  const a = new Int16Array(buf, d.off, d.len / 2); let m = 0;
+  for (let i = 0; i < a.length; i++){ const x = a[i] < 0 ? -a[i] : a[i]; if (x > m) m = x; }
+  return m ? 20 * Math.log10(m / 32768) : -96;
+}
+async function applyGain(blob, db){
+  if (!db) return blob;
+  const buf = (await blob.arrayBuffer()).slice(0), d = wavData(buf); if (!d) return blob;
+  const a = new Int16Array(buf, d.off, d.len / 2), k = Math.pow(10, db / 20);
+  for (let i = 0; i < a.length; i++){ const y = Math.round(a[i] * k); a[i] = y > 32767 ? 32767 : y < -32768 ? -32768 : y; }
+  return new Blob([buf], {type: "audio/wav"});
+}
+const PEAKS = {};
+async function peakOf(f){ if (PEAKS[f] === undefined){ const r = await fetch(audioUrl(null, f), {cache: "no-store"}); PEAKS[f] = r.ok ? await peakDb(await r.blob()) : null; } return PEAKS[f]; }
+function gtagHtml(f){ const g = gainOf(f); return g ? '<span class="gtag">' + fmtDb(g) + "</span>" : ""; }
+
+let GP = null;   // prise ouverte dans le réglage de gain : {id, f, ch, peak}
+function closeGainPop(){ const p = $("#gainpop"); if (p) p.remove(); GP = null; }
+async function openGainPop(id, f, x, y){
+  closeGainPop();
+  const l = BYID[id], rec = isRecorded(f), ch = charOfFile(f) || l.ch, cname = CHARS[ch] ? CHARS[ch].n : ch;
+  const t = (state.takes[id] || []).find(t => t.f === f || (t.cv && t.cv.f === f));
+  const label = "P" + (t ? t.t : "?") + (/_IA\.wav$/.test(f) ? " · IA voice" : "");
+  const g = state.gains || {}, followsChar = rec && g[f] === undefined && g["@" + ch] !== undefined;
+  GP = {id, f, ch};
+  const p = document.createElement("div"); p.className = "gainpop"; p.id = "gainpop";
+  p.innerHTML = '<h4>' + L("Gain", "Gain") + " · " + esc(label) + " · " + esc(cname) + '</h4>' +
+    '<div class="gprow"><input type="range" id="gp-r" min="-12" max="24" step="0.5" value="' + gainOf(f) + '" aria-label="' + L("Gain en dB", "Gain in dB") + '"><b id="gp-v">' + fmtDb(gainOf(f)) + '</b></div>' +
+    '<p class="gppeak" id="gp-peak">' + L("Mesure de la crête…", "Measuring the peak…") + '</p>' +
+    '<div class="gprow"><button class="btn" type="button" id="gp-play">▶ ' + L("Écouter", "Listen") + '</button><button class="btn gold" type="button" id="gp-norm" title="' + L("Monte la prise au maximum sans saturer (crête à −1 dBFS)", "Raises the take as high as possible without clipping (peak at −1 dBFS)") + '">' + L("Normaliser", "Normalise") + '</button><button class="btn" type="button" id="gp-zero">0 dB</button></div>' +
+    (rec ? '<label class="check"><input type="checkbox" id="gp-char"' + (followsChar ? " checked" : "") + '> ' + L("Pour toutes les prises enregistrées de ", "For all recorded takes of ") + esc(cname) + L(", y compris les suivantes", ", including the next ones") + '</label>' : "") +
+    '<p class="gphint">' + L("Le fichier du serveur ne change pas : le gain s'applique à l'écoute et aux fichiers copiés par « Transfert audio ».", "The server file doesn't change: the gain applies to playback and to the files copied by “Audio transfer”.") + '</p>';
+  document.body.appendChild(p);
+  const r = p.getBoundingClientRect();
+  p.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + "px";
+  p.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + "px";
+  const pk = await peakOf(f).catch(() => null);
+  if (GP && GP.f === f){ GP.peak = pk; showPeak(); }
+}
+function showPeak(){
+  const el = $("#gp-peak"); if (!el || !GP) return;
+  if (GP.peak === null || GP.peak === undefined){ el.textContent = L("Crête : inconnue (format non lu).", "Peak: unknown (format not read)."); return; }
+  const v = +$("#gp-r").value, after = GP.peak + v, n = x => x.toFixed(1).replace(".", L(",", "."));
+  el.innerHTML = L("Crête : ", "Peak: ") + n(GP.peak) + " dBFS → <b" + (after > 0 ? ' class="clip"' : "") + ">" + n(after) + " dBFS</b>" + (after > 0 ? L(" · ça sature", " · clipping") : "");
+}
+let gpSaveT = null;
+function gpChanged(save){
+  if (!GP) return;
+  const v = +$("#gp-r").value;
+  $("#gp-v").textContent = fmtDb(v); showPeak();
+  if (playingFile === GP.f) setPlayGain(v);
+  clearTimeout(gpSaveT);
+  if (save){ const id = GP.id, f = GP.f, ch = $("#gp-char") && $("#gp-char").checked; gpSaveT = setTimeout(() => saveGain(id, f, v, ch), 150); }
+}
+async function saveGain(id, f, v, forChar){
+  const set = {};
+  if (forChar){
+    const ch = charOfFile(f); set["@" + ch] = v;
+    // Ses prises enregistrées suivent alors le réglage du personnage.
+    Object.keys(state.gains || {}).forEach(k => { if (k[0] !== "@" && isRecorded(k) && charOfFile(k) === ch) set[k] = null; });
+  } else set[f] = v;
+  try { applyState(await api("gains", {set: JSON.stringify(set)})); if (forChar) renderView(); else refreshLine(id); }
+  catch(e){ toast(e.message, true); }
+}
+document.addEventListener("contextmenu", e => {
+  const tk = e.target.closest(".take[data-file]"); if (!tk || !ONLINE) return;
+  const row = tk.closest(".line[data-id]"); if (!row) return;
+  e.preventDefault();
+  openGainPop(row.dataset.id, tk.dataset.file, e.clientX + 4, e.clientY + 4);
+});
+document.addEventListener("input", e => { if (e.target.id === "gp-r") gpChanged(false); });
+document.addEventListener("change", e => { if (e.target.id === "gp-r") gpChanged(true); if (e.target.id === "gp-char" && GP) saveGain(GP.id, GP.f, +$("#gp-r").value, e.target.checked); });
+document.addEventListener("click", e => {
+  if (!$("#gainpop")) return;
+  if (!e.target.closest("#gainpop")){ closeGainPop(); return; }
+  if (e.target.id === "gp-play"){ play(GP.id, GP.f); setPlayGain(+$("#gp-r").value); }
+  if (e.target.id === "gp-zero"){ $("#gp-r").value = 0; gpChanged(true); }
+  if (e.target.id === "gp-norm"){
+    if (GP.peak === null || GP.peak === undefined){ toast(L("Crête inconnue : impossible de normaliser ce fichier.", "Unknown peak: this file can't be normalised."), true); return; }
+    $("#gp-r").value = Math.max(-12, Math.min(24, Math.floor((-1 - GP.peak) * 2) / 2)); gpChanged(true);
+  }
+}, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#gainpop")) closeGainPop(); }, true);
+
 // Étoile de favori : ★ pleine sur la prise retenue (celle qui part au transfert), ☆ vide sur les autres.
 function starHtml(l, file){
   if (state.selected[l.id] === file){
@@ -388,19 +510,19 @@ function takesHtml(l){
   return '<div class="takes">' + list.map(t => {
     const sel = state.selected[l.id] === t.f;
     if (t.gen) return '<span class="take ia tts' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
-      '<button class="tp" data-act="play" type="button" title="' + L("Générée par ElevenLabs à partir du texte (voix ", "Generated by ElevenLabs from the text (voice ") + esc(t.gen.v) + ', ' + esc(t.gen.model) + ')">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '<span class="iatag">IA voice</span></button>' +
+      '<button class="tp" data-act="play" type="button" title="' + L("Générée par ElevenLabs à partir du texte (voix ", "Generated by ElevenLabs from the text (voice ") + esc(t.gen.v) + ', ' + esc(t.gen.model) + ')">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '<span class="iatag">IA voice</span>' + gtagHtml(t.f) + '</button>' +
       starHtml(l, t.f) +
       '<button class="td" data-act="delete" type="button" title="' + L("Supprimer cette génération", "Delete this generation") + '">✕</button></span>';
     const busy = converting.has(t.f);
     let h = '<span class="take' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
-      '<button class="tp" data-act="play" type="button" title="' + L("Écouter la prise ", "Play take ") + t.t + (t.by ? L(" (enregistrée par ", " (recorded by ") + esc(t.by) + ")" : "") + '">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '</button>' +
+      '<button class="tp" data-act="play" type="button" title="' + L("Écouter la prise ", "Play take ") + t.t + (t.by ? L(" (enregistrée par ", " (recorded by ") + esc(t.by) + ")" : "") + L(" · clic droit : gain", " · right-click: gain") + '">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + gtagHtml(t.f) + '</button>' +
       starHtml(l, t.f) +
       (conv && !t.cv && !t.gen ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="' + L("Convertir avec la voix ElevenLabs de ", "Convert with the ElevenLabs voice of ") + esc(voiceFor(l.ch).name) + '">' + (busy ? "…" : "→ IA") + '</button>' : "") +
       '<button class="td" data-act="delete" type="button" title="' + L("Supprimer cette prise", "Delete this take") + '">✕</button></span>';
     if (t.cv){
       const s2 = state.selected[l.id] === t.cv.f;
       h += '<span class="take ia' + (s2 ? " sel" : "") + '" data-file="' + esc(t.cv.f) + '">' +
-        '<button class="tp" data-act="play" type="button" title="' + L("Version IA de la prise ", "AI version of take ") + t.t + L(" (voix ", " (voice ") + esc(t.cv.v) + ')">▶ P' + t.t + '<span class="iatag">IA voice</span></button>' +
+        '<button class="tp" data-act="play" type="button" title="' + L("Version IA de la prise ", "AI version of take ") + t.t + L(" (voix ", " (voice ") + esc(t.cv.v) + ')">▶ P' + t.t + '<span class="iatag">IA voice</span>' + gtagHtml(t.cv.f) + '</button>' +
         starHtml(l, t.cv.f) +
         (conv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="' + L("Refaire la conversion (voix ", "Convert again (voice ") + esc(voiceFor(l.ch).name) + ')">' + (busy ? "…" : "↻") + '</button>' : "") +
         '<button class="td" data-act="delete" type="button" title="' + L("Supprimer la version IA", "Delete the AI version") + '">✕</button></span>';
@@ -496,7 +618,8 @@ function helpHtml(){
   "<li>Lisez le résumé de la séquence et l'intention sous chaque réplique. Les sons vocaux (cris, efforts, rires) s'enregistrent comme les répliques.</li>" +
   "<li>Cliquez <b>Rec</b> (ou la touche Espace), jouez la réplique, recliquez pour arrêter. La prise part toute seule sur le serveur. Refaites autant de prises que vous voulez : chacune est gardée (P1, P2, P3…).</li>" +
   "<li>La prise en or, marquée ★, est le favori : c'est elle qui part au transfert. Par défaut c'est la plus récente. Cliquez ☆ sur une ancienne prise pour revenir dessus : elle reste favorite jusqu'à la prochaine prise, qui redevient favorite à son tour. ✕ deux fois supprime une prise ratée.</li>" +
-  "<li>« Lire la séquence » enchaîne les prises retenues dans l'ordre, pour entendre la scène.</li></ol></div>" +
+  "<li>« Lire la séquence » enchaîne les prises retenues dans l'ordre, pour entendre la scène.</li>" +
+  "<li>Une prise trop basse ? Clic droit dessus : réglez son gain, ou cliquez « Normaliser ». Cochez « Pour toutes les prises enregistrées de… » pour régler d'un coup tout un personnage, y compris ses prises suivantes. Le gain s'applique à l'écoute et aux fichiers transférés ; l'original reste intact sur le serveur.</li></ol></div>" +
   '<div class="box"><h3>Voix IA (ElevenLabs)</h3><ol>' +
   "<li>Dans l'onglet <b>IA Voice selector</b>, collez une fois la clé API ElevenLabs. Elle est gardée sur le serveur et n'est plus jamais affichée.</li>" +
   "<li>Toujours dans <b>IA Voice selector</b>, choisissez une voix ElevenLabs pour chaque personnage (▶ pour l'écouter).</li>" +
@@ -524,7 +647,8 @@ function helpHtmlEn(){
   "<li>Read the sequence summary and the intention under each line. Vocal sounds (screams, efforts, laughs) are recorded like the lines.</li>" +
   "<li>Click <b>Rec</b> (or press Space), play the line, click again to stop. The take is sent to the server on its own. Record as many takes as you like: each one is kept (P1, P2, P3…).</li>" +
   "<li>The gold take, marked ★, is the favourite: it is the one that goes to the transfer. By default it is the latest. Click ☆ on an older take to go back to it: it stays the favourite until the next take, which becomes the favourite in turn. ✕ twice deletes a bad take.</li>" +
-  "<li>“Play the sequence” plays the kept takes in order, so you can hear the scene.</li></ol></div>" +
+  "<li>“Play the sequence” plays the kept takes in order, so you can hear the scene.</li>" +
+  "<li>A take too quiet? Right-click it: set its gain, or click “Normalise”. Tick “For all recorded takes of…” to set a whole character at once, including their next takes. The gain applies to playback and to the transferred files; the original stays untouched on the server.</li></ol></div>" +
   '<div class="box"><h3>AI voices (ElevenLabs)</h3><ol>' +
   "<li>In the <b>IA Voice selector</b> tab, paste the ElevenLabs API key once. It is kept on the server and never shown again.</li>" +
   "<li>Still in <b>IA Voice selector</b>, choose an ElevenLabs voice for each character (▶ to listen to it).</li>" +
@@ -680,7 +804,7 @@ document.addEventListener("click", async e => {
   const p = e.target.closest("[data-preview]"); if (p){
     const v = voiceFor(p.dataset.preview), full = elVoices && v && elVoices.find(x => x.id === v.id);
     if (!full || !full.preview){ toast(L("Pas d'extrait disponible pour cette voix.", "No sample available for this voice.")); return; }
-    stopSeq(); player.src = full.preview; player.play().catch(err => toast(L("Lecture impossible : ", "Playback failed: ") + err.message, true));
+    stopSeq(); previewPlayer.src = full.preview; previewPlayer.play().catch(err => toast(L("Lecture impossible : ", "Playback failed: ") + err.message, true));
     return;
   }
   const rc = e.target.closest("[data-reconv]"); if (rc){ reconvertChar(rc.dataset.reconv, rc); return; }
@@ -752,6 +876,7 @@ async function sbState(pid){
   const takes = {}, selected = {}, pinned = {}, voices = {};
   tk.data.forEach(r => (takes[r.line] = takes[r.line] || []).push({f: r.f, t: r.t, s: r.s, d: epoch(r.created_at), dur: r.dur, by: r.by_name, cv: r.cv || undefined, gen: r.gen || undefined}));
   sel.data.forEach(r => { selected[r.line] = r.f; if (r.pinned) pinned[r.line] = true; });
+  const gains = (meta.data && meta.data.gains) || {};
   voi.data.forEach(r => voices[r.ch] = {id: r.voice_id, name: r.voice_name});
   const st = await sbStatus();
   const c = {model: "eleven_multilingual_sts_v2", format: "wav_44100", stability: 0.5, similarity: 0.75, noise: false, auto: false, tts: "eleven_multilingual_v2", ...((sett.data && sett.data.settings) || {})};
@@ -764,7 +889,7 @@ async function sbState(pid){
     const urls = sbCheck(await SB.storage.from("takes").createSignedUrls(part.map(f => pid + "/" + f), 3600));
     urls.forEach((u, k) => { if (u.signedUrl) SIGNED[pid + "/" + part[k]] = {url: u.signedUrl, exp: now + 3600}; });
   }
-  return {ok: true, name: (meta.data && meta.data.name) || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "", takes, selected, pinned, updated: 0,
+  return {ok: true, name: (meta.data && meta.data.name) || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "", takes, selected, pinned, gains, updated: 0,
           el: {hasKey: !!st.elHasKey, keyHint: st.elHint || "", model: c.model, format: c.format, stability: +c.stability, similarity: +c.similarity, noise: !!c.noise, auto: !!c.auto, tts: c.tts, voices}};
 }
 function sbValidate(p){
@@ -820,6 +945,12 @@ async function sbApi(action, data){
       return sbState(PID);
     }
     case "name": sbCheck(await SB.from("project_meta").upsert({project: PID, name: o.name})); return sbState(PID);
+    case "gains": {
+      const m = sbCheck(await SB.from("project_meta").select("gains").eq("project", PID).maybeSingle());
+      const g = {...((m && m.gains) || {})};
+      Object.entries(JSON.parse(o.set || "{}")).forEach(([k, v]) => { if (v === null || (k[0] === "@" && Math.abs(+v) < 0.05)) delete g[k]; else g[k] = Math.round(+v * 10) / 10; });
+      sbCheck(await SB.from("project_meta").upsert({project: PID, gains: g})); return sbState(PID);
+    }
     case "elsettings": {
       const cur = sbCheck(await SB.from("project_settings").select("settings").eq("project", PID).maybeSingle());
       const s = {...((cur && cur.settings) || {})};
@@ -1447,11 +1578,22 @@ document.addEventListener("click", async e => {
 
 /* ================== LECTURE ================== */
 const player = new Audio();
-let seqPlay = null;
+if (ONLINE) player.crossOrigin = "anonymous";   // nécessaire pour passer le son par Web Audio (gain)
+const previewPlayer = new Audio();               // extraits de voix ElevenLabs : hors Web Audio
+let seqPlay = null, playingFile = null, pctx = null, pgain = null;
+function setPlayGain(db){
+  if (!ONLINE) return;
+  try {
+    if (!pctx){ pctx = new (window.AudioContext || window.webkitAudioContext)(); pgain = pctx.createGain(); pctx.createMediaElementSource(player).connect(pgain).connect(pctx.destination); }
+    if (pctx.state === "suspended") pctx.resume();
+    pgain.gain.value = Math.pow(10, (db || 0) / 20);
+  } catch(e) {}
+}
 function markPlaying(id){ document.querySelectorAll(".line.playing").forEach(r => r.classList.remove("playing")); if (id){ const r = document.querySelector('.line[data-id="' + id + '"]'); if (r){ r.classList.add("playing"); r.scrollIntoView({block: "nearest", behavior: "smooth"}); } } }
 function play(id, file){
   stopSeq(true);
   const u = audioUrl(id, file); if (!u) return;
+  playingFile = file || state.selected[id]; setPlayGain(gainOf(playingFile));
   player.src = u; player.currentTime = 0;
   player.play().then(() => markPlaying(id)).catch(e => toast(L("Lecture impossible : ", "Playback failed: ") + e.message, true));
   player.onended = () => markPlaying(null);
@@ -1467,6 +1609,7 @@ function playSeq(){
     if (!seqPlay) return;
     if (seqPlay.i >= seqPlay.ids.length){ stopSeq(); return; }
     const id = seqPlay.ids[seqPlay.i++];
+    playingFile = state.selected[id]; setPlayGain(gainOf(playingFile));
     player.src = audioUrl(id); player.currentTime = 0;
     markPlaying(id);
     player.onended = () => setTimeout(next, 250);
@@ -1651,10 +1794,10 @@ async function fetchTimed(url){
   catch(e){ throw e.name === "AbortError" ? new Error(L("le serveur ne répond pas (90 s)", "the server doesn't answer (90 s)")) : e; }
   finally { clearTimeout(h); }
 }
-async function writeIfChanged(dirH, name, size, getBlob){
+async function writeIfChanged(dirH, name, size, getBlob, force){
   const fh = await dirH.getFileHandle(name, {create: true});
   const cur = await fh.getFile();
-  if (cur.size === size) return false;
+  if (cur.size === size && !force) return false;
   const blob = await getBlob();
   const w = await fh.createWritable(); await w.write(blob); await w.close();
   return true;
@@ -1689,6 +1832,9 @@ async function transfer(e){
     const total = ids.reduce((a, id) => a + state.takes[id].reduce((n, t) => n + (t.cv ? 2 : 1), 0) + 1, 0);
     let done = 0, written = 0;
     const cache = {};
+    // _gains.json : gain appliqué à chaque fichier déjà copié, pour recopier quand le réglage change.
+    let man = {}, manChanged = false;
+    try { man = JSON.parse(await (await (await dir.getFileHandle("_gains.json")).getFile()).text()) || {}; } catch(e) { man = {}; }
     const fetchBlob = async f => { if (!cache[f]){ const r = await fetchTimed(audioUrl(null, f)); if (!r.ok) throw new Error(L("fichier ", "file ") + f + L(" introuvable sur le serveur", " not found on the server")); cache[f] = await r.blob(); } return cache[f]; };
     for (const id of ids){
       const l = BYID[id];
@@ -1696,18 +1842,21 @@ async function transfer(e){
       const prDir = await seqDir.getDirectoryHandle("_prises", {create: true});
       for (const t of state.takes[id]){
         for (const x of t.cv ? [t, t.cv] : [t]){
-          if (await writeIfChanged(prDir, x.f.split("/")[1], x.s, () => fetchBlob(x.f))) written++;
+          const g = gainOf(x.f), force = (man[x.f] || 0) !== g;
+          if (await writeIfChanged(prDir, x.f.split("/")[1], x.s, async () => applyGain(await fetchBlob(x.f), g), force)) written++;
+          if (force){ if (g) man[x.f] = g; else delete man[x.f]; manChanged = true; }
           btn.textContent = L("Transfert ", "Transfer ") + (++done) + "/" + total;
         }
       }
       const selF = state.selected[id];
       if (selF && state.takes[id].some(t => t.f === selF || (t.cv && t.cv.f === selF))){
         const fh = await seqDir.getFileHandle(baseName(l), {create: true});
-        const blob = await fetchBlob(selF);
+        const blob = await applyGain(await fetchBlob(selF), gainOf(selF));
         if (!(await sameBytes(await fh.getFile(), blob))){ const w = await fh.createWritable(); await w.write(blob); await w.close(); written++; }
       }
       btn.textContent = L("Transfert ", "Transfer ") + (++done) + "/" + total;
     }
+    if (manChanged) try { const wm = await (await dir.getFileHandle("_gains.json", {create: true})).createWritable(); await wm.write(new Blob([JSON.stringify(man, null, 1)], {type: "application/json"})); await wm.close(); } catch(e) {}
     // Lecteur hors ligne : la page et le scénario du projet.
     try {
       const js = "window.IHD_PROJECT = " + JSON.stringify(PROJECT) + ";\nwindow.IHD_NAME = " + JSON.stringify(state.name) + ";\n";
@@ -1744,7 +1893,7 @@ async function startApp(){
   showWho();
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) fillMics();
   if (PID) await openProject(PID); else goHome();
-  if (!polling) polling = setInterval(async () => { if (!ME || !PID || rec || document.hidden) return; try { const before = JSON.stringify([state.takes, state.selected, state.pinned, state.name]); applyState(await api("state")); if (JSON.stringify([state.takes, state.selected, state.pinned, state.name]) !== before){ $("#name").value = state.name; renderAll(); } } catch(e) {} }, 20000);
+  if (!polling) polling = setInterval(async () => { if (!ME || !PID || rec || document.hidden) return; try { const before = JSON.stringify([state.takes, state.selected, state.pinned, state.gains, state.name]); applyState(await api("state")); if (JSON.stringify([state.takes, state.selected, state.pinned, state.gains, state.name]) !== before){ $("#name").value = state.name; renderAll(); } } catch(e) {} }, 20000);
 }
 function syncTop(){ document.documentElement.style.setProperty("--toph", ($(".top").offsetHeight + 16) + "px"); }
 window.addEventListener("resize", syncTop);

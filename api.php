@@ -64,6 +64,7 @@ function en_error($m) {
     ["Impossible d'enregistrer le fichier sur le serveur.", "Could not save the file on the server."],
     ["Requête invalide.", "Invalid request."],
     ["Prénom invalide.", "Invalid name."],
+    ["Gain hors limites (-24 à +30 dB).", "Gain out of range (-24 to +30 dB)."],
     ["Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector ».", "No ElevenLabs API key is saved. The admin has to add it in “IA Voice selector”."],
     ["Prise introuvable sur le serveur.", "Take not found on the server."],
     ["Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector ».", "No ElevenLabs voice is chosen for this character. Choose it in “IA Voice selector”."],
@@ -251,7 +252,10 @@ function read_state($file) {
   // selected : la prise retenue (favori) de chaque réplique, celle qui part au transfert sous le nom simple.
   // pinned : favori choisi à la main (★) parmi les prises existantes. Une nouvelle prise ou génération
   // redevient le favori (et efface l'épingle) : le choix manuel vaut jusqu'à la prise suivante.
-  $s += ['name' => '', 'takes' => [], 'selected' => [], 'pinned' => [], 'updated' => 0];
+  // gains : gain d'écoute et de transfert, en dB, par fichier (« SEQ01_x/SEQ01_L02_X_T1.wav ») ou par personnage (« @MILLIARDAIRE »,
+  // appliqué à toutes ses prises enregistrées, y compris les suivantes). Les fichiers du serveur ne sont jamais modifiés.
+  $s += ['name' => '', 'takes' => [], 'selected' => [], 'pinned' => [], 'gains' => [], 'updated' => 0];
+  if (!is_array($s['gains'])) $s['gains'] = [];
   if (!is_array($s['takes'])) $s['takes'] = [];
   if (!is_array($s['selected'])) $s['selected'] = [];
   if (!is_array($s['pinned'])) $s['pinned'] = [];
@@ -282,7 +286,7 @@ function public_el($c) {
           'auto' => (bool)$c['auto'], 'voices' => (object)$c['voices'], 'tts' => $c['tts']];
 }
 function public_state($s, $c) {
-  return ['ok' => true, 'name' => $s['name'], 'takes' => (object)$s['takes'], 'selected' => (object)$s['selected'], 'pinned' => (object)$s['pinned'],
+  return ['ok' => true, 'name' => $s['name'], 'takes' => (object)$s['takes'], 'selected' => (object)$s['selected'], 'pinned' => (object)$s['pinned'], 'gains' => (object)$s['gains'],
           'updated' => $s['updated'], 'el' => public_el($c)];
 }
 function el_call($method, $path, $key, $post = null, $timeout = 150, $headers = []) {
@@ -596,8 +600,8 @@ case 'delete':
     };
     $keep = [];
     foreach ($s['takes'][$line] ?? [] as $t) {
-      if ($t['f'] === $file) { $trash($t['f']); if (!empty($t['cv'])) $trash($t['cv']['f']); continue; }
-      if (($t['cv']['f'] ?? '') === $file) { $trash($file); unset($t['cv']); }
+      if ($t['f'] === $file) { $trash($t['f']); unset($s['gains'][$t['f']]); if (!empty($t['cv'])) { $trash($t['cv']['f']); unset($s['gains'][$t['cv']['f']]); } continue; }
+      if (($t['cv']['f'] ?? '') === $file) { $trash($file); unset($s['gains'][$file]); unset($t['cv']); }
       $keep[] = $t;
     }
     if ($keep) $s['takes'][$line] = $keep; else unset($s['takes'][$line]);
@@ -605,6 +609,21 @@ case 'delete':
     $still = false;
     foreach ($keep as $t) if ($t['f'] === $sel || (($t['cv']['f'] ?? '') === $sel)) $still = true;
     if (!$still) { unset($s['pinned'][$line]); if ($keep) $s['selected'][$line] = end($keep)['f']; else unset($s['selected'][$line]); }
+  });
+  out(public_state($s, read_pconf($PCONF)));
+
+case 'gains':
+  // set = {"fichier ou @PERSO": dB, ...}
+  $set = json_decode((string)($_POST['set'] ?? ''), true);
+  if (!is_array($set) || count($set) > 500) out(['ok' => false, 'error' => 'Requête invalide.'], 400);
+  foreach ($set as $k => $v) {
+    $k = (string)$k;
+    if (!preg_match($FILE_RE, $k) && !preg_match('/^@[A-Z]{2,20}$/', $k)) out(['ok' => false, 'error' => 'Requête invalide.'], 400);
+    if ($v !== null && (!is_numeric($v) || $v < -24 || $v > 30)) out(['ok' => false, 'error' => 'Gain hors limites (-24 à +30 dB).'], 400);
+  }
+  [$s] = with_state($STATE, $LOCK, function (&$s) use ($set) {
+    // null retire la valeur ; 0 sur un fichier est gardé (il ne suit plus alors le réglage de son personnage).
+    foreach ($set as $k => $v) { if ($v === null || ($k[0] === '@' && abs((float)$v) < 0.05)) unset($s['gains'][$k]); else $s['gains'][$k] = round((float)$v, 1); }
   });
   out(public_state($s, read_pconf($PCONF)));
 

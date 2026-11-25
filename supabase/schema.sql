@@ -71,6 +71,10 @@ create table if not exists public.project_meta (       -- prénom réglable ({NA
   project text primary key references public.projects on delete cascade,
   name text
 );
+-- Gains d'écoute et de transfert (dB) par fichier ou « @PERSO ».
+alter table public.project_meta add column if not exists gains jsonb not null default '{}';
+-- Gains d'écoute et de transfert (dB) par fichier ou « @PERSO ».
+alter table public.project_meta add column if not exists gains jsonb not null default '{}';
 create table if not exists public.project_voices (     -- voix ElevenLabs par personnage
   project text not null references public.projects on delete cascade,
   ch text not null,

@@ -54,6 +54,8 @@ Pas encore de comédien ? Le bouton **Generate**, à côté de **Rec**, fait lir
 
 Favori : la prise marquée ★ (en or) est celle qui part au transfert. Par défaut c'est la plus récente ; cliquez ☆ sur une autre pour la choisir. Une nouvelle prise ou génération redevient favorite à son tour. Le transfert remplace le fichier sur le PC quand le favori change.
 
+Gain : une prise trop basse ? Clic droit dessus pour monter son gain ou la « Normaliser ». La case « Pour toutes les prises enregistrées de… » règle tout un personnage d'un coup, prises suivantes comprises. L'original reste intact sur le serveur ; le gain s'applique à l'écoute et aux fichiers transférés.
+
 Langue : le bouton **FR | EN** en haut à droite passe toute l'interface en anglais (ou en français). Le contenu des projets n'est pas traduit. Les sons vocaux (rires, souffles) ne se génèrent pas : ils s'enregistrent. Le modèle de génération se choisit dans **IA Voice selector** (Multilingue v2, v3 plus expressif, Flash v2.5 rapide).
 
 ## 5. Inviter la personne qui fait les voix
