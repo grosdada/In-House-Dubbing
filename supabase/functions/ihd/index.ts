@@ -267,8 +267,7 @@ Deno.serve(async (req) => {
       const gen = { v: voice.voice_name, vid: voice.voice_id, model, fmt: format };
       const ins = await admin.from("takes").insert({ project, line, t, f, s: buf.length, dur, by_name: me.name, gen });
       if (ins.error) return fail(ins.error.message, 500);
-      const { data: pin } = await admin.from("selected").select("pinned").eq("project", project).eq("line", line).maybeSingle();
-      if (!pin?.pinned) await admin.from("selected").upsert({ project, line, f, pinned: false });
+      await admin.from("selected").upsert({ project, line, f, pinned: false });
       return json({ ok: true, take: { f, t, s: buf.length, dur, by: me.name, gen } });
     }
 

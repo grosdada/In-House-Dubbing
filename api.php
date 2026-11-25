@@ -249,7 +249,8 @@ function validate_project($p) {
 function read_state($file) {
   $s = jread($file, []);
   // selected : la prise retenue (favori) de chaque réplique, celle qui part au transfert sous le nom simple.
-  // pinned : favori choisi à la main (★) ; une nouvelle prise ou génération ne le remplace pas.
+  // pinned : favori choisi à la main (★) parmi les prises existantes. Une nouvelle prise ou génération
+  // redevient le favori (et efface l'épingle) : le choix manuel vaut jusqu'à la prise suivante.
   $s += ['name' => '', 'takes' => [], 'selected' => [], 'pinned' => [], 'updated' => 0];
   if (!is_array($s['takes'])) $s['takes'] = [];
   if (!is_array($s['selected'])) $s['selected'] = [];
@@ -567,7 +568,8 @@ case 'upload':
     $take = ['f' => $rel, 't' => $n, 's' => filesize("$PD/$rel"), 'd' => time(), 'dur' => $dur, 'by' => $ME['name']];
     $list[] = $take;
     $s['takes'][$line] = $list;
-    if (empty($s['pinned'][$line])) $s['selected'][$line] = $rel;
+    $s['selected'][$line] = $rel;
+    unset($s['pinned'][$line]);
     return $take;
   });
   if (!$take) out(['ok' => false, 'error' => "Impossible d'enregistrer le fichier sur le serveur."], 500);
@@ -761,7 +763,8 @@ case 'generate':
              'gen' => ['v' => $voice['name'], 'vid' => $voice['id'], 'model' => $model, 'fmt' => $format]];
     $list[] = $take;
     $s['takes'][$line] = $list;
-    if (empty($s['pinned'][$line])) $s['selected'][$line] = $rel;
+    $s['selected'][$line] = $rel;
+    unset($s['pinned'][$line]);
     return $take;
   });
   if (!$take) out(['ok' => false, 'error' => "Impossible d'enregistrer le fichier sur le serveur."], 500);

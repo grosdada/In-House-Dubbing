@@ -52,7 +52,7 @@ Dans le projet, onglet **IA Voice selector** : une voix ElevenLabs par personnag
 
 Pas encore de comédien ? Le bouton **Generate**, à côté de **Rec**, fait lire la réplique par la voix IA du personnage, à partir du texte du scénario (text to speech). **✦ Generate la séquence** fait de même pour toutes les répliques de la séquence qui n'ont encore aucune prise. Ces générations portent l'étiquette **IA voice** et partent au transfert comme les autres.
 
-Favori : la prise marquée ★ (en or) est celle qui part au transfert. Par défaut c'est la plus récente ; cliquez ☆ sur une autre pour la choisir. Un favori choisi à la main reste en place même si d'autres prises arrivent ensuite, et le transfert remplace le fichier sur le PC quand le favori change.
+Favori : la prise marquée ★ (en or) est celle qui part au transfert. Par défaut c'est la plus récente ; cliquez ☆ sur une autre pour la choisir. Une nouvelle prise ou génération redevient favorite à son tour. Le transfert remplace le fichier sur le PC quand le favori change.
 
 Langue : le bouton **FR | EN** en haut à droite passe toute l'interface en anglais (ou en français). Le contenu des projets n'est pas traduit. Les sons vocaux (rires, souffles) ne se génèrent pas : ils s'enregistrent. Le modèle de génération se choisit dans **IA Voice selector** (Multilingue v2, v3 plus expressif, Flash v2.5 rapide).
 

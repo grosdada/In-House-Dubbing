@@ -376,7 +376,7 @@ function lineText(l){
 function starHtml(l, file){
   if (state.selected[l.id] === file){
     const pin = !!(state.pinned && state.pinned[l.id]);
-    return '<button class="ts on' + (pin ? " pin" : "") + '" type="button" aria-pressed="true" title="' + (pin ? L("Favori : cette prise part au transfert. Les nouvelles prises ne la remplacent pas.", "Favourite: this take goes to the transfer. New takes don't replace it.") : L("Prise retenue (la plus récente). Cliquez ☆ sur une autre pour choisir votre favori.", "Kept take (the latest). Click ☆ on another one to choose your favourite.")) + '">★</button>';
+    return '<button class="ts on' + (pin ? " pin" : "") + '" type="button" aria-pressed="true" title="' + (pin ? L("Favori choisi à la main : cette prise part au transfert. Une nouvelle prise deviendra favorite à son tour.", "Favourite chosen by hand: this take goes to the transfer. A new take will become the favourite in turn.") : L("Favori : la prise la plus récente, celle qui part au transfert. Cliquez ☆ sur une autre pour revenir dessus.", "Favourite: the latest take, the one that goes to the transfer. Click ☆ on another one to go back to it.")) + '">★</button>';
   }
   return '<button class="ts" data-act="select" type="button" aria-pressed="false" title="' + L("Mettre en favori : c'est cette prise qui partira au transfert", "Make favourite: this is the take that will go to the transfer") + '">☆</button>';
 }
@@ -495,7 +495,7 @@ function helpHtml(){
   "<li>Choisissez une séquence à gauche. Filtrez par personnage si vous enregistrez un rôle à la fois, et cochez « Seulement à enregistrer » pour cacher ce qui est déjà fait.</li>" +
   "<li>Lisez le résumé de la séquence et l'intention sous chaque réplique. Les sons vocaux (cris, efforts, rires) s'enregistrent comme les répliques.</li>" +
   "<li>Cliquez <b>Rec</b> (ou la touche Espace), jouez la réplique, recliquez pour arrêter. La prise part toute seule sur le serveur. Refaites autant de prises que vous voulez : chacune est gardée (P1, P2, P3…).</li>" +
-  "<li>La prise en or, marquée ★, est le favori : c'est elle qui part au transfert. Par défaut c'est la plus récente. Cliquez ☆ sur une autre prise pour en faire votre favori : il reste en place même si d'autres prises sont enregistrées ou générées ensuite. ✕ deux fois supprime une prise ratée.</li>" +
+  "<li>La prise en or, marquée ★, est le favori : c'est elle qui part au transfert. Par défaut c'est la plus récente. Cliquez ☆ sur une ancienne prise pour revenir dessus : elle reste favorite jusqu'à la prochaine prise, qui redevient favorite à son tour. ✕ deux fois supprime une prise ratée.</li>" +
   "<li>« Lire la séquence » enchaîne les prises retenues dans l'ordre, pour entendre la scène.</li></ol></div>" +
   '<div class="box"><h3>Voix IA (ElevenLabs)</h3><ol>' +
   "<li>Dans l'onglet <b>IA Voice selector</b>, collez une fois la clé API ElevenLabs. Elle est gardée sur le serveur et n'est plus jamais affichée.</li>" +
@@ -523,7 +523,7 @@ function helpHtmlEn(){
   "<li>Pick a sequence on the left. Filter by character if you record one part at a time, and tick “Only lines to record” to hide what is already done.</li>" +
   "<li>Read the sequence summary and the intention under each line. Vocal sounds (screams, efforts, laughs) are recorded like the lines.</li>" +
   "<li>Click <b>Rec</b> (or press Space), play the line, click again to stop. The take is sent to the server on its own. Record as many takes as you like: each one is kept (P1, P2, P3…).</li>" +
-  "<li>The gold take, marked ★, is the favourite: it is the one that goes to the transfer. By default it is the latest. Click ☆ on another take to make it your favourite: it stays in place even if more takes are recorded or generated afterwards. ✕ twice deletes a bad take.</li>" +
+  "<li>The gold take, marked ★, is the favourite: it is the one that goes to the transfer. By default it is the latest. Click ☆ on an older take to go back to it: it stays the favourite until the next take, which becomes the favourite in turn. ✕ twice deletes a bad take.</li>" +
   "<li>“Play the sequence” plays the kept takes in order, so you can hear the scene.</li></ol></div>" +
   '<div class="box"><h3>AI voices (ElevenLabs)</h3><ol>' +
   "<li>In the <b>IA Voice selector</b> tab, paste the ElevenLabs API key once. It is kept on the server and never shown again.</li>" +
@@ -801,8 +801,7 @@ async function sbApi(action, data){
       const f = o.folder + "/" + o.line + "_" + o.char + "_T" + n + ".wav";
       sbCheck(await SB.storage.from("takes").upload(PID + "/" + f, o.audio, {contentType: "audio/wav"}));
       sbCheck(await SB.from("takes").insert({project: PID, line: o.line, t: n, f, s: o.audio.size, dur: +o.dur, by_name: ME.name}));
-      const pin = sbCheck(await SB.from("selected").select("pinned").eq("project", PID).eq("line", o.line).maybeSingle());
-      if (!(pin && pin.pinned)) sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f, pinned: false}));
+      sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f, pinned: false}));
       return {...(await sbState(PID)), take: {f, t: n, s: o.audio.size, dur: +o.dur, by: ME.name}};
     }
     case "select": sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: o.file, pinned: true})); return sbState(PID);
