@@ -227,7 +227,7 @@ button.gen.busy{opacity:.6;pointer-events:none}
     <span class="pill" id="mode"></span>
     <div class="prog"><span id="progtxt">0 / 0</span><span class="bar"><i id="progbar"></i></span></div>
     <button class="btn" id="playseq" type="button">▶ Lire la séquence</button>
-    <button class="btn gold" id="transfer" type="button">Transfert audio</button>
+    <button class="btn gold" id="transfer" type="button" title="Copie les prises dans le dossier du PC. Maj+clic pour choisir un autre dossier.">Transfert audio</button>
     <span class="who" id="who" hidden></span><button class="btn" id="logout" type="button" hidden>Déconnexion</button>
   </div>
   <div class="tools">
@@ -1530,17 +1530,33 @@ const idb = {
   async get(k){ const db = await this.open(); return new Promise(ok => { const q = db.transaction("h").objectStore("h").get(k); q.onsuccess = () => ok(q.result); q.onerror = () => ok(null); }); },
   async set(k, v){ const db = await this.open(); return new Promise(ok => { const t = db.transaction("h", "readwrite"); t.objectStore("h").put(v, k); t.oncomplete = ok; t.onerror = ok; }); }
 };
-async function pickDir(){
+// Dossier du PC pour ce projet : celui retenu la dernière fois, sinon (ou avec Maj+clic) le sélecteur de dossier.
+async function pickDir(choose){
   let dir = null;
-  try { dir = await idb.get("dir-" + PID); } catch(e) {}
+  if (!choose) try { dir = await idb.get("dir-" + PID); } catch(e) {}
   if (dir){
-    let p = await dir.queryPermission({mode: "readwrite"});
-    if (p !== "granted") p = await dir.requestPermission({mode: "readwrite"});
+    let p;
+    try {
+      p = await dir.queryPermission({mode: "readwrite"});
+      if (p !== "granted") p = await dir.requestPermission({mode: "readwrite"});
+    } catch(e) { p = "error"; }
     if (p === "granted") return dir;
+    // Autorisation refusée ou dossier retenu devenu inaccessible : on l'oublie. La demande a consommé le clic,
+    // le sélecteur ne peut donc s'ouvrir qu'au clic suivant.
+    try { await idb.set("dir-" + PID, null); } catch(e) {}
+    const err = new Error("Chrome n'a pas donné l'accès au dossier « " + dir.name + " ». Cliquez de nouveau sur Transfert audio pour choisir le dossier.");
+    err.name = "AskAgain"; throw err;
   }
   dir = await window.showDirectoryPicker({id: ("ihd-" + PID).slice(0, 32), mode: "readwrite"});
   try { await idb.set("dir-" + PID, dir); } catch(e) {}
   return dir;
+}
+// Téléchargement d'un fichier du serveur, abandonné au bout de 90 s pour ne jamais bloquer le bouton.
+async function fetchTimed(url){
+  const ac = new AbortController(), h = setTimeout(() => ac.abort(), 90000);
+  try { return await fetch(url, {cache: "no-store", signal: ac.signal}); }
+  catch(e){ throw e.name === "AbortError" ? new Error("le serveur ne répond pas (90 s)") : e; }
+  finally { clearTimeout(h); }
 }
 async function writeIfChanged(dirH, name, size, getBlob){
   const fh = await dirH.getFileHandle(name, {create: true});
@@ -1557,19 +1573,30 @@ async function sameBytes(file, blob){
   for (let i = 0; i < n; i++) if (a[i] !== b[i]) return false;
   return true;
 }
-async function transfer(){
+async function transfer(e){
   if (!window.showDirectoryPicker){ toast("Le transfert vers le PC marche dans Chrome ou Edge, sur ordinateur.", true); return; }
   const btn = $("#transfer");
+  if (btn.disabled) return;
   let dir;
-  try { dir = await pickDir(); } catch(e) { if (e.name !== "AbortError") toast("Dossier non accessible : " + e.message, true); return; }
+  btn.textContent = "Dossier…";
+  try { dir = await pickDir(e && e.shiftKey); }
+  catch(err){
+    btn.textContent = "Transfert audio";
+    if (err.name === "AbortError") toast("Transfert annulé : aucun dossier choisi.");
+    else if (err.name === "AskAgain") toast(err.message, true);
+    else toast("Dossier non accessible : " + err.message + " Cliquez de nouveau pour choisir le dossier.", true);
+    if (err.name !== "AbortError") try { await idb.set("dir-" + PID, null); } catch(x) {}
+    return;
+  }
   btn.disabled = true;
+  btn.textContent = "Transfert…";
   try {
     applyState(await api("state"));
     const ids = Object.keys(state.takes).filter(id => BYID[id]);
     const total = ids.reduce((a, id) => a + state.takes[id].reduce((n, t) => n + (t.cv ? 2 : 1), 0) + 1, 0);
     let done = 0, written = 0;
     const cache = {};
-    const fetchBlob = async f => { if (!cache[f]){ const r = await fetch(audioUrl(null, f), {cache: "no-store"}); if (!r.ok) throw new Error("fichier " + f + " introuvable sur le serveur"); cache[f] = await r.blob(); } return cache[f]; };
+    const fetchBlob = async f => { if (!cache[f]){ const r = await fetchTimed(audioUrl(null, f)); if (!r.ok) throw new Error("fichier " + f + " introuvable sur le serveur"); cache[f] = await r.blob(); } return cache[f]; };
     for (const id of ids){
       const l = BYID[id];
       const seqDir = await dir.getDirectoryHandle(l.folder, {create: true});
