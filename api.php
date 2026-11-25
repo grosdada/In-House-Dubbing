@@ -19,10 +19,80 @@ $DATA = __DIR__ . '/data';
 header('Cache-Control: no-store');
 
 function out($a, $code = 200) {
+  if (isset($a['error']) && is_string($a['error']) && ($_COOKIE['ihd_lang'] ?? '') === 'en') $a['error'] = en_error($a['error']);
   http_response_code($code);
+
   header('Content-Type: application/json; charset=utf-8');
   echo json_encode($a, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   exit;
+}
+/* Messages d'erreur en anglais quand l'interface est en anglais (cookie ihd_lang=en, posé par la page).
+   Les messages restent écrits en français dans le code ; cette table les traduit à la sortie. */
+function en_error($m) {
+  static $T = [
+    ["Ce n'est pas un fichier de projet JSON.", "This is not a JSON project file."],
+    ["Identifiant de projet invalide (minuscules, chiffres et tirets).", "Invalid project id (lowercase letters, digits and hyphens)."],
+    ["Le projet doit avoir un titre.", "The project needs a title."],
+    ["Le projet doit lister ses personnages (chars).", "The project must list its characters (chars)."],
+    ["Le projet doit contenir des séquences (seqs).", "The project must contain sequences (seqs)."],
+    ["Origine refusée.", "Origin refused."],
+    ["L'installation n'est pas configurée (config.php).", "The installation is not configured (config.php)."],
+    ["Lien de création invalide.", "Invalid setup link."],
+    ["Mot de passe : au moins 8 caractères.", "Password: at least 8 characters."],
+    ["Nouveau mot de passe : au moins 8 caractères.", "New password: at least 8 characters."],
+    ["Le compte admin existe déjà. Connectez-vous.", "The admin account already exists. Sign in."],
+    ["Trop de tentatives. Réessayez dans un quart d'heure.", "Too many attempts. Try again in fifteen minutes."],
+    ["Identifiant ou mot de passe incorrect.", "Wrong username or password."],
+    ["Session expirée. Reconnectez-vous.", "Session expired. Sign in again."],
+    ["Réservé à l'administrateur.", "Admin only."],
+    ["Le fichier n'est pas arrivé ou il est trop gros.", "The file didn't arrive or is too big."],
+    ["Cette clé n'a pas le format d'une clé API ElevenLabs.", "This doesn't look like an ElevenLabs API key."],
+    ["Aucune clé API ElevenLabs n'est enregistrée.", "No ElevenLabs API key is saved."],
+    ["Cette clé n'a pas le format d'une clé API Claude (sk-ant-…).", "This doesn't look like a Claude API key (sk-ant-…)."],
+    ["Modèle inconnu.", "Unknown model."],
+    ["Aucune clé API Claude n'est enregistrée (Accueil › Réglages).", "No Claude API key is saved (Home › Settings)."],
+    ["Demande vide ou trop longue.", "Empty or too long request."],
+    ["Cet identifiant existe déjà.", "This username already exists."],
+    ["Compte introuvable.", "Account not found."],
+    ["Vous ne pouvez pas supprimer votre propre compte.", "You can't delete your own account."],
+    ["Mot de passe actuel incorrect.", "Wrong current password."],
+    ["Projet introuvable.", "Project not found."],
+    ["Ce projet ne vous est pas ouvert. Demandez l'accès à l'admin.", "This project isn't open to you. Ask the admin for access."],
+    ["Réplique inconnue.", "Unknown line."],
+    ["Taille de fichier inattendue.", "Unexpected file size."],
+    ["Ce n'est pas un fichier WAV.", "This is not a WAV file."],
+    ["Impossible d'enregistrer le fichier sur le serveur.", "Could not save the file on the server."],
+    ["Requête invalide.", "Invalid request."],
+    ["Prénom invalide.", "Invalid name."],
+    ["Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector ».", "No ElevenLabs API key is saved. The admin has to add it in “IA Voice selector”."],
+    ["Prise introuvable sur le serveur.", "Take not found on the server."],
+    ["Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector ».", "No ElevenLabs voice is chosen for this character. Choose it in “IA Voice selector”."],
+    ["ElevenLabs n'a pas renvoyé de WAV.", "ElevenLabs didn't return a WAV."],
+    ["Réplique introuvable dans le scénario.", "Line not found in the script."],
+    ["Les sons vocaux ne se génèrent pas : enregistrez-les.", "Vocal sounds can't be generated: record them."],
+    ["Réplique invalide.", "Invalid line."],
+    ["Cette réplique est vide.", "This line is empty."],
+    ["Action inconnue.", "Unknown action."],
+    ["Identifiant : 2 à 32 caractères, minuscules, chiffres, point, tiret ou tiret bas.", "Username: 2 to 32 characters, lowercase letters, digits, dot, hyphen or underscore."],
+  ];
+  static $P = [
+    ['/^Personnage invalide : (.*)$/su', 'Invalid character: $1'],
+    ['/^Séquence invalide ou en double : (.*)$/su', 'Invalid or duplicate sequence: $1'],
+    ['/^Dossier invalide pour (.*)$/su', 'Invalid folder for $1'],
+    ['/^Réplique mal formée dans (.*)$/su', 'Malformed line in $1'],
+    ['/^Numéro de réplique invalide dans (\S+) : (.*)$/su', 'Invalid line number in $1: $2'],
+    ['/^Personnage inconnu dans (.+?) : (.*)$/su', 'Unknown character in $1: $2'],
+    ['/^Connexion à ElevenLabs impossible : (.*)$/su', 'Could not reach ElevenLabs: $1'],
+    ['/^ElevenLabs refuse la clé API \(401\)\. Vérifiez-la ou ses permissions\. (.*)$/su', 'ElevenLabs refuses the API key (401). Check it or its permissions. $1'],
+    ['/^ElevenLabs a répondu (\d+) : (.*)$/su', 'ElevenLabs answered $1: $2'],
+    ["/^Connexion à l'API Claude impossible : (.*)$/su", 'Could not reach the Claude API: $1'],
+    ["/^L'API Claude refuse la clé \(401\)\. (.*)$/su", 'The Claude API refuses the key (401). $1'],
+    ["/^L'API Claude a répondu (\d+) : (.*)$/su", 'The Claude API answered $1: $2'],
+    ["/^L'audio n'est pas arrivé \(erreur (.*)\)\.$/su", "The audio didn't arrive (error $1)."],
+  ];
+  foreach ($T as [$fr, $en]) if ($m === $fr) return $en;
+  foreach ($P as [$re, $en]) if (preg_match($re, $m)) return preg_replace($re, $en, $m);
+  return $m;
 }
 function jread($f, $def) { $j = is_file($f) ? json_decode((string)file_get_contents($f), true) : null; return is_array($j) ? $j : $def; }
 function jwrite($f, $d) { $t = $f . '.tmp'; file_put_contents($t, json_encode($d, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); rename($t, $f); }
@@ -178,9 +248,12 @@ function validate_project($p) {
 /* ---------- état et réglages d'un projet ---------- */
 function read_state($file) {
   $s = jread($file, []);
-  $s += ['name' => '', 'takes' => [], 'selected' => [], 'updated' => 0];
+  // selected : la prise retenue (favori) de chaque réplique, celle qui part au transfert sous le nom simple.
+  // pinned : favori choisi à la main (★) ; une nouvelle prise ou génération ne le remplace pas.
+  $s += ['name' => '', 'takes' => [], 'selected' => [], 'pinned' => [], 'updated' => 0];
   if (!is_array($s['takes'])) $s['takes'] = [];
   if (!is_array($s['selected'])) $s['selected'] = [];
+  if (!is_array($s['pinned'])) $s['pinned'] = [];
   return $s;
 }
 function with_state($file, $lock, callable $fn) {
@@ -208,7 +281,7 @@ function public_el($c) {
           'auto' => (bool)$c['auto'], 'voices' => (object)$c['voices'], 'tts' => $c['tts']];
 }
 function public_state($s, $c) {
-  return ['ok' => true, 'name' => $s['name'], 'takes' => (object)$s['takes'], 'selected' => (object)$s['selected'],
+  return ['ok' => true, 'name' => $s['name'], 'takes' => (object)$s['takes'], 'selected' => (object)$s['selected'], 'pinned' => (object)$s['pinned'],
           'updated' => $s['updated'], 'el' => public_el($c)];
 }
 function el_call($method, $path, $key, $post = null, $timeout = 150, $headers = []) {
@@ -494,7 +567,7 @@ case 'upload':
     $take = ['f' => $rel, 't' => $n, 's' => filesize("$PD/$rel"), 'd' => time(), 'dur' => $dur, 'by' => $ME['name']];
     $list[] = $take;
     $s['takes'][$line] = $list;
-    $s['selected'][$line] = $rel;
+    if (empty($s['pinned'][$line])) $s['selected'][$line] = $rel;
     return $take;
   });
   if (!$take) out(['ok' => false, 'error' => "Impossible d'enregistrer le fichier sur le serveur."], 500);
@@ -506,7 +579,7 @@ case 'select':
   if (!preg_match($LINE_RE, $line) || !preg_match($FILE_RE, $file)) out(['ok' => false, 'error' => 'Requête invalide.'], 400);
   [$s] = with_state($STATE, $LOCK, function (&$s) use ($line, $file) {
     foreach ($s['takes'][$line] ?? [] as $t)
-      if ($t['f'] === $file || (($t['cv']['f'] ?? '') === $file)) $s['selected'][$line] = $file;
+      if ($t['f'] === $file || (($t['cv']['f'] ?? '') === $file)) { $s['selected'][$line] = $file; $s['pinned'][$line] = true; }
   });
   out(public_state($s, read_pconf($PCONF)));
 
@@ -529,7 +602,7 @@ case 'delete':
     $sel = $s['selected'][$line] ?? '';
     $still = false;
     foreach ($keep as $t) if ($t['f'] === $sel || (($t['cv']['f'] ?? '') === $sel)) $still = true;
-    if (!$still) { if ($keep) $s['selected'][$line] = end($keep)['f']; else unset($s['selected'][$line]); }
+    if (!$still) { unset($s['pinned'][$line]); if ($keep) $s['selected'][$line] = end($keep)['f']; else unset($s['selected'][$line]); }
   });
   out(public_state($s, read_pconf($PCONF)));
 
@@ -627,7 +700,7 @@ case 'convert':
     foreach ($s['takes'][$line] ?? [] as $i => $t) {
       if ($t['f'] !== $file) continue;
       $s['takes'][$line][$i]['cv'] = $cv;
-      if (($s['selected'][$line] ?? '') === $file) $s['selected'][$line] = $cv['f'];
+      if (($s['selected'][$line] ?? '') === $file && empty($s['pinned'][$line])) $s['selected'][$line] = $cv['f'];
     }
   });
   out(['ok' => true, 'cv' => $cv] + public_state($s, read_pconf($PCONF)));
@@ -688,7 +761,7 @@ case 'generate':
              'gen' => ['v' => $voice['name'], 'vid' => $voice['id'], 'model' => $model, 'fmt' => $format]];
     $list[] = $take;
     $s['takes'][$line] = $list;
-    $s['selected'][$line] = $rel;
+    if (empty($s['pinned'][$line])) $s['selected'][$line] = $rel;
     return $take;
   });
   if (!$take) out(['ok' => false, 'error' => "Impossible d'enregistrer le fichier sur le serveur."], 500);

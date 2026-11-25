@@ -12,6 +12,8 @@ Une seule page HTML, qui fonctionne de deux façons :
 - **Projets** : chaque projet est un scénario découpé en séquences et en répliques (texte, personnage, intention de jeu). Page d'accueil avec la progression de chaque projet.
 - **Enregistrement** dans le navigateur, un bouton Rec par réplique (ou la touche Espace). WAV mono 16 bits, sans traitement. Toutes les prises sont gardées (P1, P2…), une est « retenue ».
 - **Voix IA** : une voix ElevenLabs par personnage. Conversion d'une prise, d'une séquence entière, ou automatique après chaque prise. Les originaux ne sont jamais écrasés. Changer la voix d'un personnage permet de refaire toutes ses versions IA à partir des originaux.
+- **Favori** : ★ sur la prise choisie de chaque réplique ; c'est elle que le transfert copie, et un favori choisi à la main n'est pas remplacé par les prises suivantes.
+- **Interface FR / EN** : bouton de langue ; le contenu des projets n'est pas traduit.
 - **Generate** : sans comédien, chaque réplique peut être lue directement par la voix IA de son personnage (ElevenLabs text to speech), une par une ou toute une séquence. Étiquette « IA voice ».
 - **Transfert vers le PC** (Chrome ou Edge) : la prise retenue de chaque réplique arrive dans le dossier de sa séquence sous un nom simple (`SEQ01_L02_PRESIDENT.wav`), toutes les prises originales et IA dans `_prises/`. Le transfert dépose aussi une copie de la page et `_projet.js` pour écouter hors ligne.
 - **Import d'un scénario PDF** : découpe automatique en séquences, personnages et répliques ; avec une clé Claude, résumés, intentions de jeu, directions de voix et sons vocaux.

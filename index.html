@@ -121,6 +121,11 @@ button{cursor:pointer}
 .rec.on{background:var(--rec);color:#fff}
 .rec.on::before{border-radius:2px;background:#fff}
 .rec.busy{opacity:.6;pointer-events:none}
+.langsw{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden;vertical-align:middle}
+.langsw button{background:none;border:0;color:var(--dust);font:600 11.5px/1 var(--mono);letter-spacing:.08em;padding:7px 9px;cursor:pointer}
+.langsw button[aria-pressed="true"]{background:var(--orb);color:#1A1405}
+.langsw button:not([aria-pressed="true"]):hover{color:var(--orb)}
+#gateform .langsw{float:right;margin:-4px -4px 0 0}
 button.gen{display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--ia);background:none;color:var(--ia);border-radius:20px;padding:6px 13px 6px 10px;font-weight:700;font-size:13px;letter-spacing:.04em}
 button.gen::before{content:"✦";font-size:12px}
 button.gen:hover{background:color-mix(in srgb,var(--ia) 15%,transparent)}
@@ -139,7 +144,10 @@ button.gen.busy{opacity:.6;pointer-events:none}
 .take .tp{color:var(--hi)}
 .take.sel{border-color:var(--orb)}
 .take.sel .tp{background:var(--orb);color:#1A1405}
-.take .ts{border-left:1px solid var(--rule)}
+.take .ts{border-left:1px solid var(--rule);font-size:13px;line-height:1}
+.take .ts.on{color:var(--orb);cursor:default}
+.take .ts.on.pin{text-shadow:0 0 6px color-mix(in srgb,var(--orb) 60%,transparent)}
+.take .ts.on:hover{background:none;color:var(--orb)}
 .take .td{border-left:1px solid var(--rule)}
 .take .td.confirm{background:var(--rec);color:#fff}
 .take .tc{border-left:1px solid var(--rule);color:var(--ia) !important;font-weight:500}
@@ -229,14 +237,15 @@ button.gen.busy{opacity:.6;pointer-events:none}
     <button class="btn" id="playseq" type="button">▶ Lire la séquence</button>
     <button class="btn gold" id="transfer" type="button" title="Copie les prises dans le dossier du PC. Maj+clic pour choisir un autre dossier.">Transfert audio</button>
     <span class="who" id="who" hidden></span><button class="btn" id="logout" type="button" hidden>Déconnexion</button>
+    <span id="langtop"></span>
   </div>
   <div class="tools">
     <div class="chips" id="filters" aria-label="Cast"></div>
-    <label class="check"><input type="checkbox" id="todo"> Seulement à enregistrer</label>
-    <label class="field" id="micfield">Micro <select id="mic"><option value="">Micro par défaut</option></select></label>
+    <label class="check"><input type="checkbox" id="todo"> <span data-i18n="todo">Seulement à enregistrer</span></label>
+    <label class="field" id="micfield"><span data-i18n="mic">Micro</span> <select id="mic"><option value="">Micro par défaut</option></select></label>
     <label class="field" id="namefield"><span id="namelabel">Prénom</span> <input id="name" maxlength="24" autocomplete="off"></label>
-    <label class="check" id="advfield"><input type="checkbox" id="advance" checked> Ligne suivante après chaque prise</label>
-    <label class="check" id="autoiafield" hidden><input type="checkbox" id="autoia"> Voix IA automatique après chaque prise</label>
+    <label class="check" id="advfield"><input type="checkbox" id="advance" checked> <span data-i18n="advance">Ligne suivante après chaque prise</span></label>
+    <label class="check" id="autoiafield" hidden><input type="checkbox" id="autoia"> <span data-i18n="autoia">Voix IA automatique après chaque prise</span></label>
   </div>
 </header>
 
@@ -272,7 +281,7 @@ function loadProject(p){
   BYID = Object.fromEntries(LINES.map(l => [l.id, l]));
   document.title = p.title + " · In-House-Dubbing";
   $("#apptitle").textContent = p.title;
-  $("#projlabel").textContent = "In-House-Dubbing" + (p.num ? " · Projet " + p.num : "") + (p.subtitle ? " · " + p.subtitle : "");
+  $("#projlabel").textContent = "In-House-Dubbing" + (p.num ? L(" · Projet ", " · Project ") + p.num : "") + (p.subtitle ? " · " + p.subtitle : "");
   const nv = p.nameVar;
   $("#namefield").hidden = !nv || !ONLINE;
   if (nv) $("#namelabel").textContent = nv.label;
@@ -287,6 +296,43 @@ let cur = 0;                 // index de séquence ; -1 = les voix ; -2 = mode d
 let filter = "ALL";
 let focusId = null;
 const $ = s => document.querySelector(s);
+/* ================== LANGUE DE L'INTERFACE ==================
+   Bouton FR / EN : en haut à droite et sur la page de connexion. Le choix est gardé dans ce navigateur
+   (et dans le cookie ihd_lang pour les messages du serveur) ; la page se recharge dans l'autre langue.
+   L("texte français", "English text") : l'interface en français ou en anglais.
+   Le contenu des projets (répliques, résumés, intentions) n'est jamais traduit. */
+let LANG = (() => { try { const v = localStorage.getItem("ihd-lang"); if (v === "fr" || v === "en") return v; } catch(e) {} return /^fr/i.test(navigator.language || "") ? "fr" : "en"; })();
+const L = (fr, en) => LANG === "en" ? en : fr;
+try { document.cookie = "ihd_lang=" + LANG + "; path=/; max-age=31536000; SameSite=Lax"; } catch(e) {}
+document.documentElement.lang = LANG;
+function langSwitchHtml(){
+  return '<span class="langsw" role="group" aria-label="' + L("Langue de l'interface", "Interface language") + '">' +
+    ["fr", "en"].map(x => '<button type="button" data-lang="' + x + '" aria-pressed="' + (LANG === x) + '">' + x.toUpperCase() + "</button>").join("") + "</span>";
+}
+function applyStaticLang(){
+  const T = {todo: L("Seulement à enregistrer", "Only lines to record"), mic: L("Micro", "Mic"), advance: L("Ligne suivante après chaque prise", "Next line after each take"), autoia: L("Voix IA automatique après chaque prise", "Automatic AI voice after each take")};
+  document.querySelectorAll("[data-i18n]").forEach(el => { if (T[el.dataset.i18n]) el.textContent = T[el.dataset.i18n]; });
+  $("#brandbtn").title = L("Changer de projet", "Switch project");
+  $("#projlabel").textContent = L("Projets", "Projects");
+  $("#home").textContent = L("← Projets", "← Projects");
+  $("#playseq").textContent = L("▶ Lire la séquence", "▶ Play the sequence");
+  $("#transfer").textContent = L("Transfert audio", "Audio transfer");
+  $("#transfer").title = L("Copie les prises dans le dossier du PC. Maj+clic pour choisir un autre dossier.", "Copies the takes into the PC folder. Shift+click to choose another folder.");
+  $("#logout").textContent = L("Déconnexion", "Sign out");
+  $("#mic").options[0].textContent = L("Micro par défaut", "Default mic");
+  $("#nav").setAttribute("aria-label", L("Séquences", "Sequences"));
+  $("#navsel").setAttribute("aria-label", L("Séquence", "Sequence"));
+  $("#keys").innerHTML = L("<b>Espace</b> rec / stop · <b>P</b> écouter · <b>↑ ↓</b> réplique", "<b>Space</b> rec / stop · <b>P</b> play · <b>↑ ↓</b> line");
+  $("#langtop").innerHTML = langSwitchHtml();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-lang]"); if (!b) return;
+  if (b.dataset.lang === LANG) return;
+  if (typeof rec !== "undefined" && rec){ toast(L("Arrêtez d'abord l'enregistrement.", "Stop the recording first."), true); return; }
+  try { localStorage.setItem("ihd-lang", b.dataset.lang); } catch(err) {}
+  try { document.cookie = "ihd_lang=" + b.dataset.lang + "; path=/; max-age=31536000; SameSite=Lax"; } catch(err) {}
+  location.reload();
+});
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const store = {get(k){try{return localStorage.getItem("ihd-"+PID+"-"+k)}catch(e){return null}}, set(k,v){try{localStorage.setItem("ihd-"+PID+"-"+k,v)}catch(e){}}};
 
@@ -299,14 +345,14 @@ async function api(action, data){
   if (data){ const fd = data instanceof FormData ? data : new FormData(); if (!(data instanceof FormData)) for (const k in data) fd.append(k, data[k]); opt = {method: "POST", body: fd}; }
   else url += "&_=" + Date.now();
   const r = await fetch(url, opt);
-  let j; try { j = await r.json(); } catch(e) { j = {ok: false, error: "Le serveur a répondu de façon inattendue (" + r.status + ")."}; }
+  let j; try { j = await r.json(); } catch(e) { j = {ok: false, error: L("Le serveur a répondu de façon inattendue (", "Unexpected answer from the server (") + r.status + ")."}; }
   if (r.status === 401 && j.login){ showGate("login"); throw new Error(j.error); }
-  if (!j.ok) throw new Error(j.error || "Erreur du serveur.");
+  if (!j.ok) throw new Error(j.error || L("Erreur du serveur.", "Server error."));
   return j;
 }
 function applyState(j){
-  if (j.takes){ state.name = j.name || state.name; state.takes = j.takes || {}; state.selected = j.selected || {}; }
-  if (j.el){ state.el = j.el; $("#autoiafield").hidden = !(ONLINE && state.el.hasKey); $("#autoia").checked = !!state.el.auto; $("#autoia").disabled = !(ME && ME.role === "admin"); $("#autoiafield").title = $("#autoia").disabled ? "Réglé par l'admin pour tout le monde" : ""; }
+  if (j.takes){ state.name = j.name || state.name; state.takes = j.takes || {}; state.selected = j.selected || {}; state.pinned = j.pinned || {}; }
+  if (j.el){ state.el = j.el; $("#autoiafield").hidden = !(ONLINE && state.el.hasKey); $("#autoia").checked = !!state.el.auto; $("#autoia").disabled = !(ME && ME.role === "admin"); $("#autoiafield").title = $("#autoia").disabled ? L("Réglé par l'admin pour tout le monde", "Set by the admin for everyone") : ""; }
 }
 function voiceFor(ch){ return state.el && state.el.voices && state.el.voices[ch]; }
 function canConvert(ch){ return ONLINE && state.el && state.el.hasKey && !!voiceFor(ch); }
@@ -322,34 +368,42 @@ function visibleLines(si){ return SEQS[si].L.map(x => BYID[SEQS[si].id + "_L" + 
 
 /* ================== RENDU ================== */
 function lineText(l){
-  if (l.kind === "v") return '<p class="en vocal">' + esc(l.text) + '<span class="tag v">son vocal</span></p>';
+  if (l.kind === "v") return '<p class="en vocal">' + esc(l.text) + '<span class="tag v">' + L("son vocal", "vocal sound") + '</span></p>';
   const t = esc(l.text).split("{NAME}").join("<mark>" + esc(state.name || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "{NAME}") + "</mark>");
-  return '<p class="en">' + t + (l.kind === "a" ? '<span class="tag">adapté</span>' : "") + "</p>";
+  return '<p class="en">' + t + (l.kind === "a" ? '<span class="tag">' + L("adapté", "adapted") + '</span>' : "") + "</p>";
+}
+// Étoile de favori : ★ pleine sur la prise retenue (celle qui part au transfert), ☆ vide sur les autres.
+function starHtml(l, file){
+  if (state.selected[l.id] === file){
+    const pin = !!(state.pinned && state.pinned[l.id]);
+    return '<button class="ts on' + (pin ? " pin" : "") + '" type="button" aria-pressed="true" title="' + (pin ? L("Favori : cette prise part au transfert. Les nouvelles prises ne la remplacent pas.", "Favourite: this take goes to the transfer. New takes don't replace it.") : L("Prise retenue (la plus récente). Cliquez ☆ sur une autre pour choisir votre favori.", "Kept take (the latest). Click ☆ on another one to choose your favourite.")) + '">★</button>';
+  }
+  return '<button class="ts" data-act="select" type="button" aria-pressed="false" title="' + L("Mettre en favori : c'est cette prise qui partira au transfert", "Make favourite: this is the take that will go to the transfer") + '">☆</button>';
 }
 function takesHtml(l){
-  if (!ONLINE) return localFound[l.id] ? '<div class="takes"><span class="take sel"><button class="tp" data-act="play" type="button">▶ ' + esc(baseName(l)) + '</button></span></div>' : '<span class="none">Pas encore de fichier</span>';
+  if (!ONLINE) return localFound[l.id] ? '<div class="takes"><span class="take sel"><button class="tp" data-act="play" type="button">▶ ' + esc(baseName(l)) + '</button></span></div>' : '<span class="none">' + L("Pas encore de fichier", "No file yet") + '</span>';
   const list = state.takes[l.id] || [];
-  if (!list.length) return '<span class="none">Aucune prise</span>';
+  if (!list.length) return '<span class="none">' + L("Aucune prise", "No take") + '</span>';
   const conv = canConvert(l.ch);
   return '<div class="takes">' + list.map(t => {
     const sel = state.selected[l.id] === t.f;
     if (t.gen) return '<span class="take ia tts' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
-      '<button class="tp" data-act="play" type="button" title="Générée par ElevenLabs à partir du texte (voix ' + esc(t.gen.v) + ', ' + esc(t.gen.model) + ')">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '<span class="iatag">IA voice</span></button>' +
-      (sel ? "" : '<button class="ts" data-act="select" type="button" title="Retenir cette génération">★</button>') +
-      '<button class="td" data-act="delete" type="button" title="Supprimer cette génération">✕</button></span>';
+      '<button class="tp" data-act="play" type="button" title="' + L("Générée par ElevenLabs à partir du texte (voix ", "Generated by ElevenLabs from the text (voice ") + esc(t.gen.v) + ', ' + esc(t.gen.model) + ')">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '<span class="iatag">IA voice</span></button>' +
+      starHtml(l, t.f) +
+      '<button class="td" data-act="delete" type="button" title="' + L("Supprimer cette génération", "Delete this generation") + '">✕</button></span>';
     const busy = converting.has(t.f);
     let h = '<span class="take' + (sel ? " sel" : "") + '" data-file="' + esc(t.f) + '">' +
-      '<button class="tp" data-act="play" type="button" title="Écouter la prise ' + t.t + (t.by ? " (enregistrée par " + esc(t.by) + ")" : "") + '">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '</button>' +
-      (sel ? "" : '<button class="ts" data-act="select" type="button" title="Retenir cette prise">★</button>') +
-      (conv && !t.cv && !t.gen ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Convertir avec la voix ElevenLabs de ' + esc(voiceFor(l.ch).name) + '">' + (busy ? "…" : "→ IA") + '</button>' : "") +
-      '<button class="td" data-act="delete" type="button" title="Supprimer cette prise">✕</button></span>';
+      '<button class="tp" data-act="play" type="button" title="' + L("Écouter la prise ", "Play take ") + t.t + (t.by ? L(" (enregistrée par ", " (recorded by ") + esc(t.by) + ")" : "") + '">▶ P' + t.t + (t.dur ? " · " + (+t.dur).toFixed(1) + "s" : "") + '</button>' +
+      starHtml(l, t.f) +
+      (conv && !t.cv && !t.gen ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="' + L("Convertir avec la voix ElevenLabs de ", "Convert with the ElevenLabs voice of ") + esc(voiceFor(l.ch).name) + '">' + (busy ? "…" : "→ IA") + '</button>' : "") +
+      '<button class="td" data-act="delete" type="button" title="' + L("Supprimer cette prise", "Delete this take") + '">✕</button></span>';
     if (t.cv){
       const s2 = state.selected[l.id] === t.cv.f;
       h += '<span class="take ia' + (s2 ? " sel" : "") + '" data-file="' + esc(t.cv.f) + '">' +
-        '<button class="tp" data-act="play" type="button" title="Version IA de la prise ' + t.t + ' (voix ' + esc(t.cv.v) + ')">▶ P' + t.t + '<span class="iatag">IA voice</span></button>' +
-        (s2 ? "" : '<button class="ts" data-act="select" type="button" title="Retenir la version IA">★</button>') +
-        (conv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="Refaire la conversion (voix ' + esc(voiceFor(l.ch).name) + ')">' + (busy ? "…" : "↻") + '</button>' : "") +
-        '<button class="td" data-act="delete" type="button" title="Supprimer la version IA">✕</button></span>';
+        '<button class="tp" data-act="play" type="button" title="' + L("Version IA de la prise ", "AI version of take ") + t.t + L(" (voix ", " (voice ") + esc(t.cv.v) + ')">▶ P' + t.t + '<span class="iatag">IA voice</span></button>' +
+        starHtml(l, t.cv.f) +
+        (conv ? '<button class="tc' + (busy ? " busy" : "") + '" data-act="convert" data-src="' + esc(t.f) + '" type="button" title="' + L("Refaire la conversion (voix ", "Convert again (voice ") + esc(voiceFor(l.ch).name) + ')">' + (busy ? "…" : "↻") + '</button>' : "") +
+        '<button class="td" data-act="delete" type="button" title="' + L("Supprimer la version IA", "Delete the AI version") + '">✕</button></span>';
     }
     return h;
   }).join("") + "</div>";
@@ -359,7 +413,7 @@ function genBtnHtml(l){
   if (!state.el || !state.el.hasKey || l.kind === "v") return "";
   const v = voiceFor(l.ch), busy = generating.has(l.id);
   return '<button class="gen' + (busy ? " busy" : "") + '" data-act="gen" type="button"' + (v ? "" : " disabled") +
-    ' title="' + (v ? "Générer cette réplique avec la voix IA " + esc(v.name) : "Choisissez d'abord une voix IA pour " + esc(CHARS[l.ch].n) + " dans « IA Voice selector »") + '">' + (busy ? "…" : "Generate") + '</button>';
+    ' title="' + (v ? L("Générer cette réplique avec la voix IA ", "Generate this line with the AI voice ") + esc(v.name) : L("Choisissez d'abord une voix IA pour ", "First choose an AI voice for ") + esc(CHARS[l.ch].n) + L(" dans « IA Voice selector »", " in “IA Voice selector”")) + '">' + (busy ? "…" : "Generate") + '</button>';
 }
 function lineHtml(l){
   const c = CHARS[l.ch];
@@ -373,29 +427,29 @@ function lineHtml(l){
 function renderNav(){
   const counts = SEQS.map(s => { const ls = s.L.map(x => s.id + "_L" + x[0]); return [ls.filter(hasAudio).length, ls.length]; });
   let h = '<button type="button" data-nav="-1"' + (cur === -1 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">IA Voice selector</span><span class="c"></span></button>' +
-          '<button type="button" data-nav="-2"' + (cur === -2 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">Mode d\'emploi</span><span class="c"></span></button>' +
-          (ONLINE && ME ? '<button type="button" data-nav="-3"' + (cur === -3 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + '</span><span class="c"></span></button>' : "") + '<div class="sep"></div>';
+          '<button type="button" data-nav="-2"' + (cur === -2 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">' + L("Mode d'emploi", "How it works") + '</span><span class="c"></span></button>' +
+          (ONLINE && ME ? '<button type="button" data-nav="-3"' + (cur === -3 ? ' aria-current="true"' : "") + '><span class="n">—</span><span class="t">' + (ME.role === "admin" ? L("Comptes", "Accounts") : L("Mon compte", "My account")) + '</span><span class="c"></span></button>' : "") + '<div class="sep"></div>';
   SEQS.forEach((s, i) => { const [a, b] = counts[i]; h += '<button type="button" data-nav="' + i + '"' + (cur === i ? ' aria-current="true"' : "") + '><span class="n">' + s.id + '</span><span class="t">' + esc(s.t) + '</span><span class="c' + (a === b ? " full" : "") + '">' + a + "/" + b + "</span></button>"; });
   $("#nav").innerHTML = h;
-  $("#navsel").innerHTML = '<option value="-1">IA Voice selector</option><option value="-2">Mode d\'emploi</option>' + (ONLINE && ME ? '<option value="-3">' + (ME.role === "admin" ? "Comptes" : "Mon compte") + "</option>" : "") + SEQS.map((s, i) => '<option value="' + i + '">' + s.id + " · " + esc(s.t) + " (" + counts[i][0] + "/" + counts[i][1] + ")</option>").join("");
+  $("#navsel").innerHTML = '<option value="-1">IA Voice selector</option><option value="-2">' + L("Mode d'emploi", "How it works") + '</option>' + (ONLINE && ME ? '<option value="-3">' + (ME.role === "admin" ? L("Comptes", "Accounts") : L("Mon compte", "My account")) + "</option>" : "") + SEQS.map((s, i) => '<option value="' + i + '">' + s.id + " · " + esc(s.t) + " (" + counts[i][0] + "/" + counts[i][1] + ")</option>").join("");
   $("#navsel").value = String(cur);
   const done = LINES.filter(l => hasAudio(l.id)).length;
-  $("#progtxt").textContent = done + " / " + LINES.length + " répliques";
+  $("#progtxt").textContent = done + " / " + LINES.length + L(" répliques", " lines");
   $("#progbar").style.width = (100 * done / LINES.length) + "%";
 }
 function renderFilters(){
   const keys = ["ALL"].concat(Object.keys(CHARS));
-  $("#filters").innerHTML = '<span class="castlabel">Cast</span>' + keys.map(k => '<button class="fchip" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (k === "ALL" ? "" : ' style="--c:' + CHARS[k].c + '"') + ">" + (k === "ALL" ? "Tous" : "<i></i>" + esc(CHARS[k].n)) + "</button>").join("");
+  $("#filters").innerHTML = '<span class="castlabel">Cast</span>' + keys.map(k => '<button class="fchip" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (k === "ALL" ? "" : ' style="--c:' + CHARS[k].c + '"') + ">" + (k === "ALL" ? L("Tous", "All") : "<i></i>" + esc(CHARS[k].n)) + "</button>").join("");
 }
 // Personnages présents dans la séquence, dans l'ordre d'apparition, avec répliques enregistrées / total.
 function seqCastHtml(si){
   const s = SEQS[si], order = [];
   s.L.forEach(x => { if (!order.includes(x[1])) order.push(x[1]); });
-  const chip = (k, label, a, b, color) => '<button class="fchip' + (a === b ? " done" : "") + '" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (color ? ' style="--c:' + color + '"' : "") + ' title="' + (k === "ALL" ? "Toute la scène" : "Seulement les répliques de " + esc(label) + " dans cette séquence") + '">' + (color ? "<i></i>" : "") + esc(label) + " <b>" + a + "/" + b + "</b></button>";
+  const chip = (k, label, a, b, color) => '<button class="fchip' + (a === b ? " done" : "") + '" type="button" data-f="' + k + '" aria-pressed="' + (filter === k) + '"' + (color ? ' style="--c:' + color + '"' : "") + ' title="' + (k === "ALL" ? L("Toute la scène", "Whole scene") : L("Seulement les répliques de ", "Only the lines of ") + esc(label) + L(" dans cette séquence", " in this sequence")) + '">' + (color ? "<i></i>" : "") + esc(label) + " <b>" + a + "/" + b + "</b></button>";
   const ids = s.L.map(x => [s.id + "_L" + x[0], x[1]]);
-  let h = chip("ALL", "Toute la scène", ids.filter(x => hasAudio(x[0])).length, ids.length, "");
+  let h = chip("ALL", L("Toute la scène", "Whole scene"), ids.filter(x => hasAudio(x[0])).length, ids.length, "");
   order.forEach(k => { const mine = ids.filter(x => x[1] === k); h += chip(k, CHARS[k].n, mine.filter(x => hasAudio(x[0])).length, mine.length, CHARS[k].c); });
-  return '<div class="seqcast" aria-label="Personnages de la séquence">' + h + "</div>";
+  return '<div class="seqcast" aria-label="' + L("Personnages de la séquence", "Characters in this sequence") + '">' + h + "</div>";
 }
 function renderView(){
   const v = $("#view");
@@ -405,9 +459,9 @@ function renderView(){
   if (cur === -12){ renderGuide(); return; }
   $("#playseq").hidden = cur < 0;
   if (cur === -1){
-    v.innerHTML = '<div class="seqhead"><h2>IA Voice selector</h2><p class="summary">Une direction générale par personnage. Les intentions précises sont à côté de chaque réplique.</p></div>' +
+    v.innerHTML = '<div class="seqhead"><h2>IA Voice selector</h2><p class="summary">' + L("Une direction générale par personnage. Les intentions précises sont à côté de chaque réplique.", "One overall direction per character. The precise intentions are next to each line.") + '</p></div>' +
       (ONLINE ? elBoxHtml() : "") + '<div class="voices">' +
-      Object.keys(CHARS).map(k => { const n = LINES.filter(l => l.ch === k); return '<div class="voice" style="--c:' + CHARS[k].c + '"><h3><i></i>' + esc(CHARS[k].n) + '</h3><p>' + esc(CHARS[k].v) + '</p><span class="cnt label">' + n.filter(l => hasAudio(l.id)).length + " / " + n.length + ' répliques</span>' + (ONLINE && state.el.hasKey ? voiceSelHtml(k) : "") + '</div>'; }).join("") + "</div>";
+      Object.keys(CHARS).map(k => { const n = LINES.filter(l => l.ch === k); return '<div class="voice" style="--c:' + CHARS[k].c + '"><h3><i></i>' + esc(CHARS[k].n) + '</h3><p>' + esc(CHARS[k].v) + '</p><span class="cnt label">' + n.filter(l => hasAudio(l.id)).length + " / " + n.length + L(" répliques", " lines") + '</span>' + (ONLINE && state.el.hasKey ? voiceSelHtml(k) : "") + '</div>'; }).join("") + "</div>";
     if (ONLINE && state.el.hasKey && !elVoices) loadVoices();
     return;
   }
@@ -417,9 +471,9 @@ function renderView(){
   const ls = visibleLines(cur);
   v.innerHTML = '<div class="seqhead"><div class="row1"><h2>' + s.id + " · " + esc(s.t) + '</h2><span class="slug">' + esc(s.slug) + " · " + s.p + '</span></div>' +
     seqCastHtml(cur) +
-    '<p class="summary">' + esc(s.s) + '</p><span class="folder">Dossier : ' + s.folder + '</span>' +
-    (ONLINE && state.el.hasKey ? '<div><button class="btn" id="convseq" type="button" title="Convertit la prise retenue de chaque réplique qui n\'a pas encore de version IA">→ Convertir la séquence en voix IA</button> <button class="btn" id="genseq" type="button" title="Génère avec ElevenLabs chaque réplique de la séquence qui n\'a encore aucune prise (sons vocaux exclus)">✦ Generate la séquence</button></div>' : "") + '</div>' +
-    '<div class="lines">' + (ls.length ? ls.map(lineHtml).join("") : '<p class="none" style="padding:20px 0">Aucune réplique ne correspond au filtre dans cette séquence.</p>') + "</div>";
+    '<p class="summary">' + esc(s.s) + '</p><span class="folder">' + L("Dossier : ", "Folder: ") + s.folder + '</span>' +
+    (ONLINE && state.el.hasKey ? '<div><button class="btn" id="convseq" type="button" title="' + L("Convertit la prise retenue de chaque réplique qui n'a pas encore de version IA", "Converts the kept take of every line that has no AI version yet") + '">' + L("→ Convertir la séquence en voix IA", "→ Convert the sequence to AI voices") + '</button> <button class="btn" id="genseq" type="button" title="' + L("Génère avec ElevenLabs chaque réplique de la séquence qui n'a encore aucune prise (sons vocaux exclus)", "Generates with ElevenLabs every line of the sequence that has no take yet (vocal sounds excluded)") + '">' + L("✦ Generate la séquence", "✦ Generate the sequence") + '</button></div>' : "") + '</div>' +
+    '<div class="lines">' + (ls.length ? ls.map(lineHtml).join("") : '<p class="none" style="padding:20px 0">' + L("Aucune réplique ne correspond au filtre dans cette séquence.", "No line matches the filter in this sequence.") + '</p>') + "</div>";
   if (focusId && !document.querySelector('.line[data-id="' + focusId + '"]')) focusId = null;
   if (focusId) setFocus(focusId, false);
 }
@@ -433,6 +487,7 @@ function renderAll(){ renderNav(); renderView(); }
 function go(i){ stopSeq(); cur = i; if (i >= 0 && filter !== "ALL" && !SEQS[i].L.some(x => x[1] === filter)){ filter = "ALL"; renderFilters(); } renderAll(); window.scrollTo({top: 0}); store.set("seq", String(i)); }
 
 function helpHtml(){
+  if (LANG === "en") return helpHtmlEn();
   return '<div class="seqhead"><h2>Mode d\'emploi</h2></div><div class="help">' +
   '<div class="box"><h3>Pour enregistrer les voix</h3><ol>' +
   "<li>Ouvrez le lien reçu dans Chrome, Edge, Safari ou Firefox, sur ordinateur, avec un casque sur les oreilles pour éviter que le son des prises ne repasse dans le micro.</li>" +
@@ -440,22 +495,51 @@ function helpHtml(){
   "<li>Choisissez une séquence à gauche. Filtrez par personnage si vous enregistrez un rôle à la fois, et cochez « Seulement à enregistrer » pour cacher ce qui est déjà fait.</li>" +
   "<li>Lisez le résumé de la séquence et l'intention sous chaque réplique. Les sons vocaux (cris, efforts, rires) s'enregistrent comme les répliques.</li>" +
   "<li>Cliquez <b>Rec</b> (ou la touche Espace), jouez la réplique, recliquez pour arrêter. La prise part toute seule sur le serveur. Refaites autant de prises que vous voulez : chacune est gardée (P1, P2, P3…).</li>" +
-  "<li>La prise en or est la prise retenue : c'est la dernière par défaut. Cliquez ★ sur une autre pour la retenir à sa place, ✕ deux fois pour supprimer une prise ratée.</li>" +
+  "<li>La prise en or, marquée ★, est le favori : c'est elle qui part au transfert. Par défaut c'est la plus récente. Cliquez ☆ sur une autre prise pour en faire votre favori : il reste en place même si d'autres prises sont enregistrées ou générées ensuite. ✕ deux fois supprime une prise ratée.</li>" +
   "<li>« Lire la séquence » enchaîne les prises retenues dans l'ordre, pour entendre la scène.</li></ol></div>" +
   '<div class="box"><h3>Voix IA (ElevenLabs)</h3><ol>' +
   "<li>Dans l'onglet <b>IA Voice selector</b>, collez une fois la clé API ElevenLabs. Elle est gardée sur le serveur et n'est plus jamais affichée.</li>" +
   "<li>Toujours dans <b>IA Voice selector</b>, choisissez une voix ElevenLabs pour chaque personnage (▶ pour l'écouter).</li>" +
-  "<li>Sur une prise, cliquez <b>→ IA</b> : la version transformée apparaît à côté (P2·IA) et devient la prise retenue. ↻ refait la conversion, par exemple après avoir changé de voix.</li>" +
+  "<li>Sur une prise, cliquez <b>→ IA</b> : la version transformée apparaît à côté (étiquette IA voice) et devient la prise retenue. ↻ refait la conversion, par exemple après avoir changé de voix.</li>" +
   "<li>« Convertir la séquence en voix IA » traite d'un coup toutes les prises retenues qui n'ont pas encore leur version IA. La case « Voix IA automatique après chaque prise » convertit chaque nouvelle prise dès son envoi.</li>" +
   "<li>Les prises originales sont toujours gardées. Si une voix ne convient pas, changez-la dans <b>IA Voice selector</b> : le bouton « ↻ Refaire ses prises » refait toutes les versions IA de ce personnage à partir des originaux, avec la nouvelle voix.</li>" +
-  "<li>Les conversions sont décomptées sur le compte ElevenLabs de la clé.</li></ol></div>" +
+  "<li>Sans comédien, le bouton <b>Generate</b> à côté de Rec fait lire la réplique par la voix IA du personnage, à partir du texte. « ✦ Generate la séquence » le fait pour toutes les répliques qui n'ont encore aucune prise. Les sons vocaux s'enregistrent.</li>" +
+  "<li>Les conversions et générations sont décomptées sur le compte ElevenLabs de la clé.</li></ol></div>" +
   '<div class="box"><h3>Pour récupérer les audios sur le PC</h3><ol>' +
   "<li>Ouvrez le même lien dans Chrome ou Edge, sur le PC.</li>" +
   "<li>Cliquez <b>Transfert audio</b> et choisissez le dossier du projet sur votre PC (par exemple <code>…\\Voix-maquettes</code>). Le navigateur demande l'autorisation d'y écrire : acceptez. Il s'en souviendra pour ce projet.</li>" +
   "<li>Chaque séquence va dans son dossier. La prise retenue de chaque réplique y est copiée sous son nom simple, par exemple <code>SEQ01_L02_PRESIDENT.wav</code>. Toutes les prises sont aussi copiées dans le sous-dossier <code>_prises</code>, par exemple <code>SEQ01_L02_PRESIDENT_T3.wav</code>, avec leurs versions IA (<code>SEQ01_L02_PRESIDENT_T3_IA.wav</code>).</li>" +
-  "<li>Relancez le transfert quand vous voulez : les fichiers déjà à jour sont sautés, et si la prise retenue a changé, le fichier simple est remplacé.</li></ol></div>" +
+  "<li>Relancez le transfert quand vous voulez : les fichiers déjà à jour sont sautés, et si le favori a changé, le fichier simple est remplacé par le favori.</li></ol></div>" +
   '<div class="box"><h3>Sans connexion</h3><p>Le transfert dépose aussi <code>In-House-Dubbing.html</code> et <code>_projet.js</code> dans le dossier. Ouvert directement depuis le dossier, ce fichier affiche le projet et lit les fichiers déjà transférés (les noms simples), sans Rec ni transfert.</p></div>' +
   '<div class="box"><h3>Le format</h3><p>WAV mono 16 bits, à la fréquence du micro (48 kHz en général), sans traitement : ni réduction de bruit ni contrôle automatique du gain, pour garder la voix telle quelle. Les toutes premières et dernières fractions de seconde sont coupées pour retirer le clic du bouton.</p></div>' +
+  "</div>";
+}
+
+function helpHtmlEn(){
+  return '<div class="seqhead"><h2>How it works</h2></div><div class="help">' +
+  '<div class="box"><h3>Recording the voices</h3><ol>' +
+  "<li>Open the link you received in Chrome, Edge, Safari or Firefox, on a computer, wearing headphones so the takes don't bleed back into the mic.</li>" +
+  "<li>Choose your mic at the top of the page. On the first Rec, the browser asks for permission to use the mic: allow it.</li>" +
+  "<li>Pick a sequence on the left. Filter by character if you record one part at a time, and tick “Only lines to record” to hide what is already done.</li>" +
+  "<li>Read the sequence summary and the intention under each line. Vocal sounds (screams, efforts, laughs) are recorded like the lines.</li>" +
+  "<li>Click <b>Rec</b> (or press Space), play the line, click again to stop. The take is sent to the server on its own. Record as many takes as you like: each one is kept (P1, P2, P3…).</li>" +
+  "<li>The gold take, marked ★, is the favourite: it is the one that goes to the transfer. By default it is the latest. Click ☆ on another take to make it your favourite: it stays in place even if more takes are recorded or generated afterwards. ✕ twice deletes a bad take.</li>" +
+  "<li>“Play the sequence” plays the kept takes in order, so you can hear the scene.</li></ol></div>" +
+  '<div class="box"><h3>AI voices (ElevenLabs)</h3><ol>' +
+  "<li>In the <b>IA Voice selector</b> tab, paste the ElevenLabs API key once. It is kept on the server and never shown again.</li>" +
+  "<li>Still in <b>IA Voice selector</b>, choose an ElevenLabs voice for each character (▶ to listen to it).</li>" +
+  "<li>On a take, click <b>→ IA</b>: the transformed version appears next to it (IA voice tag) and becomes the kept take. ↻ converts it again, for example after changing the voice.</li>" +
+  "<li>“Convert the sequence to AI voices” processes at once every kept take that has no AI version yet. The “Automatic AI voice after each take” box converts each new take as soon as it is sent.</li>" +
+  "<li>The original takes are always kept. If a voice doesn't work, change it in <b>IA Voice selector</b>: the “↻ Redo their takes” button redoes every AI version of that character from the originals, with the new voice.</li>" +
+  "<li>Without an actor, the <b>Generate</b> button next to Rec has the line read by the character's AI voice, from the text. “✦ Generate the sequence” does it for every line that has no take yet. Vocal sounds have to be recorded.</li>" +
+  "<li>Conversions and generations are charged to the ElevenLabs account of the key.</li></ol></div>" +
+  '<div class="box"><h3>Getting the audio onto the PC</h3><ol>' +
+  "<li>Open the same link in Chrome or Edge, on the PC.</li>" +
+  "<li>Click <b>Audio transfer</b> and choose the project folder on your PC (for example <code>…\\Voix-maquettes</code>). The browser asks for permission to write there: allow it. It remembers the folder for this project. Shift+click to choose another folder.</li>" +
+  "<li>Each sequence goes into its own folder. The kept take of each line is copied under its plain name, for example <code>SEQ01_L02_PRESIDENT.wav</code>. All the takes are also copied into the <code>_prises</code> subfolder, for example <code>SEQ01_L02_PRESIDENT_T3.wav</code>, with their AI versions (<code>SEQ01_L02_PRESIDENT_T3_IA.wav</code>).</li>" +
+  "<li>Run the transfer again whenever you like: files already up to date are skipped, and if the favourite has changed, the plain file is replaced by the favourite.</li></ol></div>" +
+  '<div class="box"><h3>Offline</h3><p>The transfer also drops <code>In-House-Dubbing.html</code> and <code>_projet.js</code> into the folder. Opened straight from the folder, that file shows the project and plays the files already transferred (the plain names), without Rec or transfer.</p></div>' +
+  '<div class="box"><h3>The format</h3><p>Mono 16-bit WAV, at the mic\'s sample rate (usually 48 kHz), with no processing: no noise reduction or automatic gain control, to keep the voice as it is. The very first and last fractions of a second are cut to remove the button click.</p></div>' +
   "</div>";
 }
 
@@ -463,35 +547,36 @@ function helpHtml(){
 function elBoxHtml(){
   const e = state.el;
   const opt = (v, cur, label) => '<option value="' + v + '"' + (v === cur ? " selected" : "") + ">" + label + "</option>";
-  let h = '<div class="elbox"><h3>Voix IA · ElevenLabs</h3>' +
-    '<p>Une seule personne joue tous les rôles. Chaque prise peut ensuite être transformée avec la voix ElevenLabs choisie pour son personnage (voice changer) : le jeu, le rythme et les intentions sont gardés, seul le timbre change. La version IA apparaît à côté de la prise avec l\'étiquette IA voice, elle devient la prise retenue et part au transfert comme les autres. Sans comédien, le bouton « Generate » de chaque réplique la fait lire directement par la voix IA du personnage, à partir du texte.</p>';
+  let h = '<div class="elbox"><h3>' + L("Voix IA · ElevenLabs", "AI voices · ElevenLabs") + '</h3>' + (LANG === "en" ?
+    '<p>One person plays every part. Each take can then be transformed with the ElevenLabs voice chosen for its character (voice changer): the acting, the timing and the intentions are kept, only the timbre changes. The AI version appears next to the take with the IA voice tag, becomes the kept take and goes to the transfer like the others. Without an actor, the “Generate” button of each line has it read directly by the character\'s AI voice, from the text.</p>' :
+    '<p>Une seule personne joue tous les rôles. Chaque prise peut ensuite être transformée avec la voix ElevenLabs choisie pour son personnage (voice changer) : le jeu, le rythme et les intentions sont gardés, seul le timbre change. La version IA apparaît à côté de la prise avec l\'étiquette IA voice, elle devient la prise retenue et part au transfert comme les autres. Sans comédien, le bouton « Generate » de chaque réplique la fait lire directement par la voix IA du personnage, à partir du texte.</p>');
   const admin = ME && ME.role === "admin";
   if (!admin){
-    h += e.hasKey ? '<p class="hint">La clé et les réglages sont gérés par l\'admin. Vous pouvez choisir la voix de chaque personnage ci-dessous.</p>' : '<p class="hint">L\'admin n\'a pas encore enregistré de clé ElevenLabs.</p>';
+    h += e.hasKey ? '<p class="hint">' + L("La clé et les réglages sont gérés par l'admin. Vous pouvez choisir la voix de chaque personnage ci-dessous.", "The key and the settings are managed by the admin. You can choose the voice of each character below.") + '</p>' : '<p class="hint">' + L("L'admin n'a pas encore enregistré de clé ElevenLabs.", "The admin hasn't saved an ElevenLabs key yet.") + '</p>';
   } else if (!e.hasKey){
-    h += '<div class="elrow"><input type="password" id="elkey" placeholder="Clé API ElevenLabs (sk_…)" autocomplete="off" spellcheck="false"><button class="btn gold" type="button" data-el="savekey">Enregistrer la clé</button></div>' +
-      '<p class="hint">La clé est vérifiée auprès d\'ElevenLabs, puis gardée sur le serveur : elle n\'est plus jamais affichée, ni envoyée aux navigateurs. Les conversions sont décomptées sur le compte de cette clé. Elle doit avoir au moins les permissions « Voices : lecture » et « Voice changer ».</p>';
+    h += '<div class="elrow"><input type="password" id="elkey" placeholder="' + L("Clé API ElevenLabs (sk_…)", "ElevenLabs API key (sk_…)") + '" autocomplete="off" spellcheck="false"><button class="btn gold" type="button" data-el="savekey">' + L("Enregistrer la clé", "Save the key") + '</button></div>' +
+      '<p class="hint">' + L("La clé est vérifiée auprès d'ElevenLabs, puis gardée sur le serveur : elle n'est plus jamais affichée, ni envoyée aux navigateurs. Les conversions sont décomptées sur le compte de cette clé. Elle doit avoir au moins les permissions « Voices : lecture », « Voice changer » et « Text to speech ».", "The key is checked with ElevenLabs, then kept on the server: it is never shown again, nor sent to browsers. Conversions are charged to the account of this key. It needs at least the “Voices: read”, “Voice changer” and “Text to speech” permissions.") + '</p>';
   } else {
-    h += '<div class="elrow"><span class="ok">Clé enregistrée (…' + esc(e.keyHint) + ')</span><button class="btn" type="button" data-el="delkey">Retirer la clé</button></div>' +
+    h += '<div class="elrow"><span class="ok">' + L("Clé enregistrée (…", "Key saved (…") + esc(e.keyHint) + ')</span><button class="btn" type="button" data-el="delkey">' + L("Retirer la clé", "Remove the key") + '</button></div>' +
       '<div class="elrow">' +
-      '<label class="field">Modèle <select id="elmodel">' + opt("eleven_multilingual_sts_v2", e.model, "Multilingue v2") + opt("eleven_english_sts_v2", e.model, "Anglais v2") + '</select></label>' +
-      '<label class="field">Qualité <select id="elformat">' + opt("wav_48000", e.format, "WAV 48 kHz") + opt("wav_44100", e.format, "WAV 44,1 kHz") + opt("wav_24000", e.format, "WAV 24 kHz") + '</select></label>' +
-      '<label class="field">Stabilité <input type="range" id="elstab" min="0" max="1" step="0.05" value="' + e.stability + '"><span id="elstabv">' + (+e.stability).toFixed(2) + '</span></label>' +
-      '<label class="field">Ressemblance <input type="range" id="elsim" min="0" max="1" step="0.05" value="' + e.similarity + '"><span id="elsimv">' + (+e.similarity).toFixed(2) + '</span></label>' +
-      '<label class="check"><input type="checkbox" id="elnoise"' + (e.noise ? " checked" : "") + '> Nettoyer le bruit de fond</label></div>' +
-      '<div class="elrow"><label class="field">Generate (texte → voix) <select id="eltts">' + opt("eleven_multilingual_v2", e.tts, "Multilingue v2 · stable") + opt("eleven_v3", e.tts, "v3 · plus expressif") + opt("eleven_flash_v2_5", e.tts, "Flash v2.5 · rapide") + '</select></label></div>' +
-      '<p class="hint">Choisissez une voix pour chaque personnage ci-dessous. Si votre offre ElevenLabs ne permet pas le 44,1 ou 48 kHz, la conversion repasse toute seule en 24 kHz.</p>';
+      '<label class="field">' + L("Modèle", "Model") + ' <select id="elmodel">' + opt("eleven_multilingual_sts_v2", e.model, L("Multilingue v2", "Multilingual v2")) + opt("eleven_english_sts_v2", e.model, L("Anglais v2", "English v2")) + '</select></label>' +
+      '<label class="field">' + L("Qualité", "Quality") + ' <select id="elformat">' + opt("wav_48000", e.format, "WAV 48 kHz") + opt("wav_44100", e.format, L("WAV 44,1 kHz", "WAV 44.1 kHz")) + opt("wav_24000", e.format, "WAV 24 kHz") + '</select></label>' +
+      '<label class="field">' + L("Stabilité", "Stability") + ' <input type="range" id="elstab" min="0" max="1" step="0.05" value="' + e.stability + '"><span id="elstabv">' + (+e.stability).toFixed(2) + '</span></label>' +
+      '<label class="field">' + L("Ressemblance", "Similarity") + ' <input type="range" id="elsim" min="0" max="1" step="0.05" value="' + e.similarity + '"><span id="elsimv">' + (+e.similarity).toFixed(2) + '</span></label>' +
+      '<label class="check"><input type="checkbox" id="elnoise"' + (e.noise ? " checked" : "") + '> ' + L("Nettoyer le bruit de fond", "Remove background noise") + '</label></div>' +
+      '<div class="elrow"><label class="field">' + L("Generate (texte → voix)", "Generate (text → voice)") + ' <select id="eltts">' + opt("eleven_multilingual_v2", e.tts, L("Multilingue v2 · stable", "Multilingual v2 · stable")) + opt("eleven_v3", e.tts, L("v3 · plus expressif", "v3 · more expressive")) + opt("eleven_flash_v2_5", e.tts, L("Flash v2.5 · rapide", "Flash v2.5 · fast")) + '</select></label></div>' +
+      '<p class="hint">' + L("Choisissez une voix pour chaque personnage ci-dessous. Si votre offre ElevenLabs ne permet pas le 44,1 ou 48 kHz, la conversion repasse toute seule en 24 kHz.", "Choose a voice for each character below. If your ElevenLabs plan doesn't allow 44.1 or 48 kHz, the conversion falls back to 24 kHz on its own.") + '</p>';
   }
   return h + "</div>";
 }
 function voiceSelHtml(ch){
   const cur = voiceFor(ch);
-  let opts = '<option value="">— Pas de voix IA —</option>';
+  let opts = '<option value="">' + L("— Pas de voix IA —", "— No AI voice —") + '</option>';
   if (elVoices) opts += elVoices.map(v => '<option value="' + esc(v.id) + '"' + (cur && cur.id === v.id ? " selected" : "") + ">" + esc(v.name) + (v.cat ? " · " + esc(v.cat) : "") + "</option>").join("");
   else if (cur) opts += '<option value="' + esc(cur.id) + '" selected>' + esc(cur.name) + "</option>";
   const n = reconvTargets(ch).length;
-  return '<div class="vsel"><select data-voice="' + ch + '" aria-label="Voix ElevenLabs de ' + esc(CHARS[ch].n) + '">' + opts + '</select><button type="button" data-preview="' + ch + '" title="Écouter un extrait de la voix">▶</button></div>' +
-    (cur && n ? '<div class="vsel"><button type="button" data-reconv="' + ch + '" title="Refait la version IA de ses prises à partir des originaux, avec la voix choisie">↻ Refaire ses ' + n + ' prise(s) avec ' + esc(cur.name) + '</button></div>' : "");
+  return '<div class="vsel"><select data-voice="' + ch + '" aria-label="' + L("Voix ElevenLabs de ", "ElevenLabs voice of ") + esc(CHARS[ch].n) + '">' + opts + '</select><button type="button" data-preview="' + ch + '" title="' + L("Écouter un extrait de la voix", "Listen to a sample of the voice") + '">▶</button></div>' +
+    (cur && n ? '<div class="vsel"><button type="button" data-reconv="' + ch + '" title="' + L("Refait la version IA de ses prises à partir des originaux, avec la voix choisie", "Redoes the AI version of their takes from the originals, with the chosen voice") + '">' + L("↻ Refaire ses ", "↻ Redo their ") + n + L(" prise(s) avec ", " take(s) with ") + esc(cur.name) + '</button></div>' : "");
 }
 // Prises d'un personnage à (re)convertir avec sa voix actuelle : versions IA faites avec une autre voix, et prises retenues sans version IA.
 function reconvTargets(ch){
@@ -508,10 +593,10 @@ async function reconvertChar(ch, b){
   b.disabled = true;
   let ok = 0;
   for (let i = 0; i < todo.length; i++){
-    b.textContent = "Conversion " + (i + 1) + "/" + todo.length + "…";
+    b.textContent = L("Conversion ", "Converting ") + (i + 1) + "/" + todo.length + "…";
     if (await convertTake(todo[i][0], todo[i][1], true)) ok++; else break;
   }
-  toast(ok + " prise(s) de " + CHARS[ch].n + " refaite(s) avec la voix " + voiceFor(ch).name + ".");
+  toast(ok + L(" prise(s) de ", " take(s) of ") + CHARS[ch].n + L(" refaite(s) avec la voix ", " redone with the voice ") + voiceFor(ch).name + ".");
   if (cur === -1) renderView();
 }
 async function loadVoices(){
@@ -524,10 +609,10 @@ async function convertTake(id, src, quiet){
   try {
     const j = await api("convert", {line: id, file: src});
     applyState(j);
-    if (!quiet) toast("Version IA prête · " + CHARS[BYID[id].ch].n + " " + BYID[id].num + " (voix " + j.cv.v + ")");
+    if (!quiet) toast(L("Version IA prête · ", "AI version ready · ") + CHARS[BYID[id].ch].n + " " + BYID[id].num + L(" (voix ", " (voice ") + j.cv.v + ")");
     return true;
   } catch(e) {
-    toast("Conversion impossible : " + e.message, true);
+    toast(L("Conversion impossible : ", "Conversion failed: ") + e.message, true);
     return false;
   } finally { converting.delete(src); refreshLine(id); }
 }
@@ -539,10 +624,10 @@ async function generateLine(id, quiet){
   try {
     const j = await api("generate", {line: id});
     applyState(j);
-    if (!quiet) toast("IA voice générée · " + CHARS[l.ch].n + " " + l.num + " (voix " + j.take.gen.v + ")");
+    if (!quiet) toast(L("IA voice générée · ", "IA voice generated · ") + CHARS[l.ch].n + " " + l.num + L(" (voix ", " (voice ") + j.take.gen.v + ")");
     return true;
   } catch(e) {
-    toast("Génération impossible : " + e.message, true);
+    toast(L("Génération impossible : ", "Generation failed: ") + e.message, true);
     return false;
   } finally { generating.delete(id); setBtn(); refreshLine(id); }
 }
@@ -551,15 +636,15 @@ async function generateSeq(){
   const all = SEQS[cur].L.map(x => BYID[SEQS[cur].id + "_L" + x[0]]).filter(l => l.kind !== "v" && !hasAudio(l.id));
   const todo = all.filter(l => voiceFor(l.ch));
   const noVoice = [...new Set(all.filter(l => !voiceFor(l.ch)).map(l => CHARS[l.ch].n))];
-  if (!todo.length){ toast(noVoice.length ? "Rien à générer. Personnages sans voix IA choisie : " + noVoice.join(", ") + "." : "Toutes les répliques de cette séquence ont déjà une prise."); return; }
+  if (!todo.length){ toast(noVoice.length ? L("Rien à générer. Personnages sans voix IA choisie : ", "Nothing to generate. Characters without an AI voice: ") + noVoice.join(", ") + "." : L("Toutes les répliques de cette séquence ont déjà une prise.", "Every line of this sequence already has a take.")); return; }
   btn.disabled = true;
   let ok = 0;
   for (let i = 0; i < todo.length; i++){
-    if ($("#genseq")) $("#genseq").textContent = "Génération " + (i + 1) + "/" + todo.length + "…";
+    if ($("#genseq")) $("#genseq").textContent = L("Génération ", "Generating ") + (i + 1) + "/" + todo.length + "…";
     if (await generateLine(todo[i].id, true)) ok++; else break;
   }
-  if ($("#genseq")){ $("#genseq").disabled = false; $("#genseq").textContent = "✦ Generate la séquence"; }
-  toast(ok + " réplique(s) générée(s) en IA voice." + (noVoice.length ? " Sans voix IA : " + noVoice.join(", ") + "." : ""));
+  if ($("#genseq")){ $("#genseq").disabled = false; $("#genseq").textContent = L("✦ Generate la séquence", "✦ Generate the sequence"); }
+  toast(ok + L(" réplique(s) générée(s) en IA voice.", " line(s) generated in IA voice.") + (noVoice.length ? L(" Sans voix IA : ", " No AI voice: ") + noVoice.join(", ") + "." : ""));
 }
 async function convertSeq(){
   const btn = $("#convseq");
@@ -568,34 +653,34 @@ async function convertSeq(){
     return t && !t.cv && !t.gen ? [l.id, t.f] : null;
   }).filter(Boolean);
   const noVoice = [...new Set(SEQS[cur].L.map(x => x[1]).filter(ch => !voiceFor(ch)))];
-  if (!todo.length){ toast(noVoice.length ? "Rien à convertir. Personnages sans voix IA choisie : " + noVoice.map(c => CHARS[c].n).join(", ") + "." : "Toutes les prises retenues de cette séquence ont déjà leur version IA."); return; }
+  if (!todo.length){ toast(noVoice.length ? L("Rien à convertir. Personnages sans voix IA choisie : ", "Nothing to convert. Characters without an AI voice: ") + noVoice.map(c => CHARS[c].n).join(", ") + "." : L("Toutes les prises retenues de cette séquence ont déjà leur version IA.", "Every kept take of this sequence already has its AI version.")); return; }
   btn.disabled = true;
   let ok = 0;
   for (let i = 0; i < todo.length; i++){
-    btn.textContent = "Conversion " + (i + 1) + "/" + todo.length + "…";
+    btn.textContent = L("Conversion ", "Converting ") + (i + 1) + "/" + todo.length + "…";
     if (await convertTake(todo[i][0], todo[i][1], true)) ok++; else break;
   }
-  if ($("#convseq")){ $("#convseq").disabled = false; $("#convseq").textContent = "→ Convertir la séquence en voix IA"; }
-  toast(ok + " prise(s) convertie(s)." + (noVoice.length ? " Sans voix IA : " + noVoice.map(c => CHARS[c].n).join(", ") + "." : ""));
+  if ($("#convseq")){ $("#convseq").disabled = false; $("#convseq").textContent = L("→ Convertir la séquence en voix IA", "→ Convert the sequence to AI voices"); }
+  toast(ok + L(" prise(s) convertie(s).", " take(s) converted.") + (noVoice.length ? L(" Sans voix IA : ", " No AI voice: ") + noVoice.map(c => CHARS[c].n).join(", ") + "." : ""));
 }
 async function elSave(fields){ try { applyState(await api("elsettings", fields)); } catch(e){ toast(e.message, true); } }
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-el]"); if (b){
     if (b.dataset.el === "savekey"){
-      const key = ($("#elkey").value || "").trim(); if (!key){ toast("Collez d'abord la clé API.", true); return; }
-      b.disabled = true; b.textContent = "Vérification…";
-      try { await api("elkey", {key}); applyState(await api("state")); elVoices = null; toast("Clé ElevenLabs vérifiée et enregistrée."); renderView(); }
-      catch(err){ toast(err.message, true); b.disabled = false; b.textContent = "Enregistrer la clé"; }
+      const key = ($("#elkey").value || "").trim(); if (!key){ toast(L("Collez d'abord la clé API.", "Paste the API key first."), true); return; }
+      b.disabled = true; b.textContent = L("Vérification…", "Checking…");
+      try { await api("elkey", {key}); applyState(await api("state")); elVoices = null; toast(L("Clé ElevenLabs vérifiée et enregistrée.", "ElevenLabs key checked and saved.")); renderView(); }
+      catch(err){ toast(err.message, true); b.disabled = false; b.textContent = L("Enregistrer la clé", "Save the key"); }
     } else if (b.dataset.el === "delkey"){
-      if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Retirer vraiment ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "Retirer la clé"; } }, 3000); return; }
-      try { await api("elkey", {key: ""}); applyState(await api("state")); elVoices = null; toast("Clé retirée du serveur."); renderAll(); } catch(err){ toast(err.message, true); }
+      if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = L("Retirer vraiment ?", "Really remove?"); setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = L("Retirer la clé", "Remove the key"); } }, 3000); return; }
+      try { await api("elkey", {key: ""}); applyState(await api("state")); elVoices = null; toast(L("Clé retirée du serveur.", "Key removed from the server.")); renderAll(); } catch(err){ toast(err.message, true); }
     }
     return;
   }
   const p = e.target.closest("[data-preview]"); if (p){
     const v = voiceFor(p.dataset.preview), full = elVoices && v && elVoices.find(x => x.id === v.id);
-    if (!full || !full.preview){ toast("Pas d'extrait disponible pour cette voix."); return; }
-    stopSeq(); player.src = full.preview; player.play().catch(err => toast("Lecture impossible : " + err.message, true));
+    if (!full || !full.preview){ toast(L("Pas d'extrait disponible pour cette voix.", "No sample available for this voice.")); return; }
+    stopSeq(); player.src = full.preview; player.play().catch(err => toast(L("Lecture impossible : ", "Playback failed: ") + err.message, true));
     return;
   }
   const rc = e.target.closest("[data-reconv]"); if (rc){ reconvertChar(rc.dataset.reconv, rc); return; }
@@ -606,7 +691,7 @@ document.addEventListener("change", async e => {
   const t = e.target;
   if (t.dataset && t.dataset.voice){
     const o = t.selectedOptions[0];
-    try { applyState(await api("elmap", {char: t.dataset.voice, id: t.value, name: t.value ? o.textContent.split(" · ")[0] : ""})); toast(t.value ? CHARS[t.dataset.voice].n + " → " + o.textContent.split(" · ")[0] : "Voix IA retirée pour " + CHARS[t.dataset.voice].n); renderView(); }
+    try { applyState(await api("elmap", {char: t.dataset.voice, id: t.value, name: t.value ? o.textContent.split(" · ")[0] : ""})); toast(t.value ? CHARS[t.dataset.voice].n + " → " + o.textContent.split(" · ")[0] : L("Voix IA retirée pour ", "AI voice removed for ") + CHARS[t.dataset.voice].n); renderView(); }
     catch(err){ toast(err.message, true); }
   }
   else if (t.id === "elmodel") elSave({model: t.value});
@@ -615,7 +700,7 @@ document.addEventListener("change", async e => {
   else if (t.id === "elstab") elSave({stability: t.value});
   else if (t.id === "elsim") elSave({similarity: t.value});
   else if (t.id === "elnoise") elSave({noise: t.checked ? "1" : "0"});
-  else if (t.id === "autoia"){ await elSave({auto: t.checked ? "1" : "0"}); toast(t.checked ? "Voix IA automatique activée pour tout le monde : chaque nouvelle prise sera convertie (si son personnage a une voix)." : "Voix IA automatique désactivée."); }
+  else if (t.id === "autoia"){ await elSave({auto: t.checked ? "1" : "0"}); toast(t.checked ? L("Voix IA automatique activée pour tout le monde : chaque nouvelle prise sera convertie (si son personnage a une voix).", "Automatic AI voice on for everyone: each new take will be converted (if its character has a voice).") : L("Voix IA automatique désactivée.", "Automatic AI voice off.")); }
 });
 document.addEventListener("input", e => {
   if (e.target.id === "elstab") $("#elstabv").textContent = (+e.target.value).toFixed(2);
@@ -629,7 +714,7 @@ document.addEventListener("input", e => {
 let SB = null, SBST = null;          // client Supabase, état des clés (fonction ihd)
 const SIGNED = {};                   // URL signées des fichiers audio : "projet/fichier" -> {url, exp}
 const SBLIB = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
-function loadScript(src){ return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error("Chargement impossible : " + src)); document.head.appendChild(s); }); }
+function loadScript(src){ return new Promise((ok, ko) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => ko(new Error(L("Chargement impossible : ", "Could not load: ") + src)); document.head.appendChild(s); }); }
 async function detectSupabase(){
   try { await loadScript("supabase-config.js"); } catch(e) { return false; }
   const c = window.IHD_SUPABASE;
@@ -642,9 +727,9 @@ async function detectSupabase(){
 const fdObj = d => { if (!(d instanceof FormData)) return d || {}; const o = {}; for (const [k, v] of d.entries()) o[k] = v; return o; };
 const sbCheck = r => { if (r.error) throw new Error(r.error.message); return r.data; };
 async function sbFn(action, payload){
-  const {data, error} = await SB.functions.invoke("ihd", {body: {action, ...(payload || {})}});
+  const {data, error} = await SB.functions.invoke("ihd", {body: {action, lang: LANG, ...(payload || {})}});
   if (error){ let msg = error.message; try { const j = await error.context.json(); msg = j.error || msg; } catch(e) {} throw new Error(msg); }
-  if (!data || !data.ok) throw new Error((data && data.error) || "La fonction « ihd » a répondu de façon inattendue.");
+  if (!data || !data.ok) throw new Error((data && data.error) || L("La fonction « ihd » a répondu de façon inattendue.", "The “ihd” function gave an unexpected answer."));
   return data;
 }
 async function sbStatus(force){ if (!SBST || force){ try { SBST = await sbFn("status"); } catch(e) { SBST = {elHasKey: false, aiHasKey: false, aiModels: {}, fnError: e.message}; } } return SBST; }
@@ -664,9 +749,9 @@ async function sbState(pid){
     SB.from("project_settings").select("*").eq("project", pid).maybeSingle(),
     SB.from("project_voices").select("*").eq("project", pid)]);
   [tk, sel, meta, sett, voi].forEach(sbCheck);
-  const takes = {}, selected = {}, voices = {};
+  const takes = {}, selected = {}, pinned = {}, voices = {};
   tk.data.forEach(r => (takes[r.line] = takes[r.line] || []).push({f: r.f, t: r.t, s: r.s, d: epoch(r.created_at), dur: r.dur, by: r.by_name, cv: r.cv || undefined, gen: r.gen || undefined}));
-  sel.data.forEach(r => selected[r.line] = r.f);
+  sel.data.forEach(r => { selected[r.line] = r.f; if (r.pinned) pinned[r.line] = true; });
   voi.data.forEach(r => voices[r.ch] = {id: r.voice_id, name: r.voice_name});
   const st = await sbStatus();
   const c = {model: "eleven_multilingual_sts_v2", format: "wav_44100", stability: 0.5, similarity: 0.75, noise: false, auto: false, tts: "eleven_multilingual_v2", ...((sett.data && sett.data.settings) || {})};
@@ -679,13 +764,13 @@ async function sbState(pid){
     const urls = sbCheck(await SB.storage.from("takes").createSignedUrls(part.map(f => pid + "/" + f), 3600));
     urls.forEach((u, k) => { if (u.signedUrl) SIGNED[pid + "/" + part[k]] = {url: u.signedUrl, exp: now + 3600}; });
   }
-  return {ok: true, name: (meta.data && meta.data.name) || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "", takes, selected, updated: 0,
+  return {ok: true, name: (meta.data && meta.data.name) || (PROJECT && PROJECT.nameVar ? PROJECT.nameVar.def : "") || "", takes, selected, pinned, updated: 0,
           el: {hasKey: !!st.elHasKey, keyHint: st.elHint || "", model: c.model, format: c.format, stability: +c.stability, similarity: +c.similarity, noise: !!c.noise, auto: !!c.auto, tts: c.tts, voices}};
 }
 function sbValidate(p){
-  if (!p || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(p.id || "")) return "Identifiant de projet invalide.";
-  if (!p.title || !p.chars || !Array.isArray(p.seqs) || !p.seqs.length) return "Fichier de projet incomplet (titre, personnages, séquences).";
-  for (const s of p.seqs) for (const l of s.lines || []) if (!p.chars[l[1]]) return "Personnage inconnu : " + l[1];
+  if (!p || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(p.id || "")) return L("Identifiant de projet invalide.", "Invalid project id.");
+  if (!p.title || !p.chars || !Array.isArray(p.seqs) || !p.seqs.length) return L("Fichier de projet incomplet (titre, personnages, séquences).", "Incomplete project file (title, characters, sequences).");
+  for (const s of p.seqs) for (const l of s.lines || []) if (!p.chars[l[1]]) return L("Personnage inconnu : ", "Unknown character: ") + l[1];
   return null;
 }
 async function sbApi(action, data){
@@ -716,10 +801,11 @@ async function sbApi(action, data){
       const f = o.folder + "/" + o.line + "_" + o.char + "_T" + n + ".wav";
       sbCheck(await SB.storage.from("takes").upload(PID + "/" + f, o.audio, {contentType: "audio/wav"}));
       sbCheck(await SB.from("takes").insert({project: PID, line: o.line, t: n, f, s: o.audio.size, dur: +o.dur, by_name: ME.name}));
-      sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f}));
+      const pin = sbCheck(await SB.from("selected").select("pinned").eq("project", PID).eq("line", o.line).maybeSingle());
+      if (!(pin && pin.pinned)) sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f, pinned: false}));
       return {...(await sbState(PID)), take: {f, t: n, s: o.audio.size, dur: +o.dur, by: ME.name}};
     }
-    case "select": sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: o.file})); return sbState(PID);
+    case "select": sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: o.file, pinned: true})); return sbState(PID);
     case "delete": {
       const rows = sbCheck(await SB.from("takes").select("*").eq("project", PID).eq("line", o.line).order("t"));
       const trash = async rel => { await SB.storage.from("takes").move(PID + "/" + rel, PID + "/_corbeille/" + Date.now() + "_" + rel.split("/")[1]); };
@@ -729,7 +815,7 @@ async function sbApi(action, data){
       else if (cvRow){ await trash(o.file); sbCheck(await SB.from("takes").update({cv: null}).eq("id", cvRow.id)); keep = rows.map(r => r === cvRow ? {...r, cv: null} : r); }
       const sel = sbCheck(await SB.from("selected").select("f").eq("project", PID).eq("line", o.line).maybeSingle());
       if (!keep.some(r => sel && (r.f === sel.f || (r.cv && r.cv.f === sel.f)))){
-        if (keep.length) sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: keep[keep.length - 1].f}));
+        if (keep.length) sbCheck(await SB.from("selected").upsert({project: PID, line: o.line, f: keep[keep.length - 1].f, pinned: false}));
         else sbCheck(await SB.from("selected").delete().eq("project", PID).eq("line", o.line));
       }
       return sbState(PID);
@@ -756,7 +842,7 @@ async function sbApi(action, data){
       if (action === "aikey") SBST = await sbFn("aikey", {key: o.key});
       else if (action === "aimodel") SBST = await sbFn("aimodel", {model: o.model});
       else await sbStatus(true);
-      if (SBST.fnError) throw new Error("La fonction « ihd » ne répond pas : " + SBST.fnError + " Vérifiez qu'elle est déployée (voir GUIDE.md).");
+      if (SBST.fnError) throw new Error(L("La fonction « ihd » ne répond pas : ", "The “ihd” function doesn't answer: ") + SBST.fnError + L(" Vérifiez qu'elle est déployée (voir GUIDE.md).", " Check that it is deployed (see GUIDE.md)."));
       return {ok: true, ai: {hasKey: !!SBST.aiHasKey, keyHint: SBST.aiHint || "", model: SBST.aiModel, models: SBST.aiModels}};
     }
     case "claude": return sbFn("claude", o);
@@ -771,35 +857,35 @@ async function sbApi(action, data){
     case "userdel": return sbFn("userdel", {user: o.user});
     case "userreset": sbCheck(await SB.auth.resetPasswordForEmail(o.email, {redirectTo: location.origin + location.pathname})); return {ok: true};
     case "mypass": {
-      if ((o.new || "").length < 8) throw new Error("Nouveau mot de passe : au moins 8 caractères.");
+      if ((o.new || "").length < 8) throw new Error(L("Nouveau mot de passe : au moins 8 caractères.", "New password: at least 8 characters."));
       sbCheck(await SB.auth.updateUser({password: o.new})); return {ok: true};
     }
   }
-  throw new Error("Action non disponible avec Supabase : " + action);
+  throw new Error(L("Action non disponible avec Supabase : ", "Action not available with Supabase: ") + action);
 }
 function showGateSB(mode){
   const g = $("#gate"); g.hidden = false;
-  const m = {login: "Se connecter", signup: "Créer un compte", pending: "", recovery: "Choisir un nouveau mot de passe"}[mode];
-  let h = '<form id="gateform" autocomplete="on"><div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>';
+  const m = {login: L("Se connecter", "Sign in"), signup: L("Créer un compte", "Create an account"), pending: "", recovery: L("Choisir un nouveau mot de passe", "Choose a new password")}[mode];
+  let h = '<form id="gateform" autocomplete="on">' + langSwitchHtml() + '<div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>';
   if (mode === "pending"){
-    g.innerHTML = h + '<p>Votre compte est créé. Il attend la validation de l\'admin, qui vous ouvrira les projets sur lesquels vous travaillez.</p><div class="err" id="g-err"></div><button class="btn gold" type="button" id="g-recheck">Vérifier à nouveau</button><button class="btn" type="button" id="g-out">Se déconnecter</button></form>';
-    $("#g-recheck").onclick = async () => { const me = await sbMe(); if (me.user && me.user.role !== "pending"){ ME = me.user; g.hidden = true; await startApp(); } else $("#g-err").textContent = "Toujours en attente."; };
+    g.innerHTML = h + '<p>' + L("Votre compte est créé. Il attend la validation de l'admin, qui vous ouvrira les projets sur lesquels vous travaillez.", "Your account is created. It is waiting for the admin's approval; the admin will open the projects you work on.") + '</p><div class="err" id="g-err"></div><button class="btn gold" type="button" id="g-recheck">' + L("Vérifier à nouveau", "Check again") + '</button><button class="btn" type="button" id="g-out">' + L("Se déconnecter", "Sign out") + '</button></form>';
+    $("#g-recheck").onclick = async () => { const me = await sbMe(); if (me.user && me.user.role !== "pending"){ ME = me.user; g.hidden = true; await startApp(); } else $("#g-err").textContent = L("Toujours en attente.", "Still waiting."); };
     $("#g-out").onclick = async () => { await SB.auth.signOut(); showGateSB("login"); };
     return;
   }
-  h += (mode === "signup" ? "<p>Créez votre compte. Le tout premier compte de l'installation devient admin ; les suivants sont validés par l'admin.</p>" : mode === "recovery" ? "<p>Entrez votre nouveau mot de passe.</p>" : "<p>Connectez-vous avec votre adresse e-mail.</p>") +
-    (mode === "signup" ? '<label>Nom affiché<input id="g-name" autocomplete="name" required></label>' : "") +
-    (mode === "recovery" ? "" : '<label>Adresse e-mail<input id="g-user" type="email" name="email" autocomplete="email" required></label>') +
-    '<label>Mot de passe<input id="g-pass" type="password" autocomplete="' + (mode === "login" ? "current-password" : "new-password") + '" required minlength="' + (mode === "login" ? 1 : 8) + '"></label>' +
+  h += "<p>" + (mode === "signup" ? L("Créez votre compte. Le tout premier compte de l'installation devient admin ; les suivants sont validés par l'admin.", "Create your account. The very first account of the installation becomes admin; the next ones are approved by the admin.") : mode === "recovery" ? L("Entrez votre nouveau mot de passe.", "Enter your new password.") : L("Connectez-vous avec votre adresse e-mail.", "Sign in with your email address.")) + "</p>" +
+    (mode === "signup" ? '<label>' + L("Nom affiché", "Display name") + '<input id="g-name" autocomplete="name" required></label>' : "") +
+    (mode === "recovery" ? "" : '<label>' + L("Adresse e-mail", "Email address") + '<input id="g-user" type="email" name="email" autocomplete="email" required></label>') +
+    '<label>' + L("Mot de passe", "Password") + '<input id="g-pass" type="password" autocomplete="' + (mode === "login" ? "current-password" : "new-password") + '" required minlength="' + (mode === "login" ? 1 : 8) + '"></label>' +
     '<div class="err" id="g-err"></div><button class="btn gold" type="submit">' + m + "</button>" +
-    (mode === "login" ? '<button class="btn" type="button" data-gm="signup">Créer un compte</button><button class="btn" type="button" data-gm="forgot">Mot de passe oublié</button>' : mode === "signup" ? '<button class="btn" type="button" data-gm="login">J\'ai déjà un compte</button>' : "") + "</form>";
+    (mode === "login" ? '<button class="btn" type="button" data-gm="signup">' + L("Créer un compte", "Create an account") + '</button><button class="btn" type="button" data-gm="forgot">' + L("Mot de passe oublié", "Forgot password") + '</button>' : mode === "signup" ? '<button class="btn" type="button" data-gm="login">' + L("J'ai déjà un compte", "I already have an account") + '</button>' : "") + "</form>";
   g.innerHTML = h;
   (g.querySelector("input") || {}).focus && g.querySelector("input").focus();
   g.querySelectorAll("[data-gm]").forEach(b => b.onclick = async () => {
     if (b.dataset.gm !== "forgot") return showGateSB(b.dataset.gm);
-    const em = $("#g-user").value.trim(); if (!em){ $("#g-err").textContent = "Entrez d'abord votre adresse e-mail."; return; }
+    const em = $("#g-user").value.trim(); if (!em){ $("#g-err").textContent = L("Entrez d'abord votre adresse e-mail.", "Enter your email address first."); return; }
     const r = await SB.auth.resetPasswordForEmail(em, {redirectTo: location.origin + location.pathname});
-    $("#g-err").textContent = r.error ? r.error.message : "Un lien de réinitialisation vient d'être envoyé à " + em + ".";
+    $("#g-err").textContent = r.error ? r.error.message : L("Un lien de réinitialisation vient d'être envoyé à ", "A reset link has just been sent to ") + em + ".";
   });
   $("#gateform").addEventListener("submit", async e => {
     e.preventDefault();
@@ -809,10 +895,10 @@ function showGateSB(mode){
       if (mode === "recovery"){ sbCheck(await SB.auth.updateUser({password: pass})); }
       else if (mode === "signup"){
         const r = sbCheck(await SB.auth.signUp({email: $("#g-user").value.trim(), password: pass, options: {data: {name: $("#g-name").value.trim()}, emailRedirectTo: location.origin + location.pathname}}));
-        if (!r.session){ $("#g-err").textContent = "Compte créé. Confirmez votre adresse avec le lien reçu par e-mail, puis connectez-vous."; btn.disabled = false; return; }
+        if (!r.session){ $("#g-err").textContent = L("Compte créé. Confirmez votre adresse avec le lien reçu par e-mail, puis connectez-vous.", "Account created. Confirm your address with the link you received by email, then sign in."); btn.disabled = false; return; }
       } else sbCheck(await SB.auth.signInWithPassword({email: $("#g-user").value.trim(), password: pass}));
       const me = await sbMe();
-      if (!me.user){ throw new Error("Profil introuvable. Le fichier supabase/schema.sql a-t-il bien été exécuté ?"); }
+      if (!me.user){ throw new Error(L("Profil introuvable. Le fichier supabase/schema.sql a-t-il bien été exécuté ?", "Profile not found. Was supabase/schema.sql run?")); }
       if (me.user.role === "pending") return showGateSB("pending");
       ME = me.user; g.hidden = true; g.innerHTML = ""; await startApp();
     } catch(err) { $("#g-err").textContent = err.message; btn.disabled = false; }
@@ -821,37 +907,37 @@ function showGateSB(mode){
 async function renderAccountsSB(){
   const v = $("#view");
   const admin = ME && ME.role === "admin";
-  let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>') + '<div class="seqhead"><h2>' + (admin ? "Comptes" : "Mon compte") + '</h2><p class="summary">' +
-    (admin ? "Les collaborateurs créent eux-mêmes leur compte sur la page de connexion (« Créer un compte »). Ils apparaissent ici « en attente » : validez-les et cochez les projets qu'ils peuvent voir." : "Connecté en tant que <b>" + esc(ME.name) + "</b> (" + esc(ME.email || "") + ").") + '</p></div><div class="acct">';
-  if (admin) h += '<div class="box"><h3>Comptes</h3><div id="a-list"><p class="none">Chargement…</p></div></div>';
-  h += '<div class="box"><h3>Changer mon mot de passe</h3><div class="row"><label>Nouveau mot de passe<input id="m-new" type="password" autocomplete="new-password" minlength="8"></label><button class="btn" type="button" data-sbacct="mypass">Changer</button></div></div></div>';
+  let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>' + L("← Projets", "← Projects") + '</button></div>') + '<div class="seqhead"><h2>' + (admin ? L("Comptes", "Accounts") : L("Mon compte", "My account")) + '</h2><p class="summary">' +
+    (admin ? L("Les collaborateurs créent eux-mêmes leur compte sur la page de connexion (« Créer un compte »). Ils apparaissent ici « en attente » : validez-les et cochez les projets qu'ils peuvent voir.", "Collaborators create their own account on the sign-in page (“Create an account”). They show up here as “pending”: approve them and tick the projects they can see.") : L("Connecté en tant que <b>", "Signed in as <b>") + esc(ME.name) + "</b> (" + esc(ME.email || "") + ").") + '</p></div><div class="acct">';
+  if (admin) h += '<div class="box"><h3>' + L("Comptes", "Accounts") + '</h3><div id="a-list"><p class="none">' + L("Chargement…", "Loading…") + '</p></div></div>';
+  h += '<div class="box"><h3>' + L("Changer mon mot de passe", "Change my password") + '</h3><div class="row"><label>' + L("Nouveau mot de passe", "New password") + '<input id="m-new" type="password" autocomplete="new-password" minlength="8"></label><button class="btn" type="button" data-sbacct="mypass">' + L("Changer", "Change") + '</button></div></div></div>';
   v.innerHTML = h;
   if (!admin) return;
   try {
     const j = await api("users");
-    const boxes = u => j.allProjects.map(p => '<label class="check"><input type="checkbox" data-sbproj="' + esc(p.id) + '" data-uid="' + u.id + '"' + ((u.projects || []).includes(p.id) ? " checked" : "") + "> " + esc(p.title) + "</label>").join("") || '<span class="none">Aucun projet.</span>';
-    $("#a-list").innerHTML = '<table><tr><th>Compte</th><th>Rôle</th><th>Projets</th><th></th></tr>' + j.users.map(u =>
-      "<tr><td>" + esc(u.name) + '<br><span class="label" style="text-transform:none;letter-spacing:0">' + esc(u.email || "") + "</span>" + (u.id === ME.id ? " (vous)" : "") + "</td><td>" +
-      (u.role === "admin" ? "Admin" : u.role === "guest" ? "Invité" : '<b style="color:var(--orb)">En attente</b>') + '</td><td><div class="projs">' + (u.role === "admin" ? '<span class="none">Tous</span>' : boxes(u)) + '</div></td><td class="act">' +
-      (u.id === ME.id ? "" : (u.role === "pending" ? '<button class="btn gold" type="button" data-sbacct="approve" data-uid="' + u.id + '">Valider</button>' : "") +
-        '<button class="btn" type="button" data-sbacct="reset" data-email="' + esc(u.email || "") + '">Lien nouveau mot de passe</button><button class="btn" type="button" data-sbacct="del" data-uid="' + u.id + '">Supprimer</button>') + "</td></tr>").join("") + "</table>";
+    const boxes = u => j.allProjects.map(p => '<label class="check"><input type="checkbox" data-sbproj="' + esc(p.id) + '" data-uid="' + u.id + '"' + ((u.projects || []).includes(p.id) ? " checked" : "") + "> " + esc(p.title) + "</label>").join("") || '<span class="none">' + L("Aucun projet.", "No project.") + '</span>';
+    $("#a-list").innerHTML = '<table><tr><th>' + L("Compte", "Account") + '</th><th>' + L("Rôle", "Role") + '</th><th>' + L("Projets", "Projects") + '</th><th></th></tr>' + j.users.map(u =>
+      "<tr><td>" + esc(u.name) + '<br><span class="label" style="text-transform:none;letter-spacing:0">' + esc(u.email || "") + "</span>" + (u.id === ME.id ? L(" (vous)", " (you)") : "") + "</td><td>" +
+      (u.role === "admin" ? "Admin" : u.role === "guest" ? L("Invité", "Guest") : '<b style="color:var(--orb)">' + L("En attente", "Pending") + '</b>') + '</td><td><div class="projs">' + (u.role === "admin" ? '<span class="none">' + L("Tous", "All") + '</span>' : boxes(u)) + '</div></td><td class="act">' +
+      (u.id === ME.id ? "" : (u.role === "pending" ? '<button class="btn gold" type="button" data-sbacct="approve" data-uid="' + u.id + '">' + L("Valider", "Approve") + '</button>' : "") +
+        '<button class="btn" type="button" data-sbacct="reset" data-email="' + esc(u.email || "") + '">' + L("Lien nouveau mot de passe", "New password link") + '</button><button class="btn" type="button" data-sbacct="del" data-uid="' + u.id + '">' + L("Supprimer", "Delete") + '</button>') + "</td></tr>").join("") + "</table>";
   } catch(e) { $("#a-list").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
 }
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-sbacct]"); if (!b) return;
   try {
     const a = b.dataset.sbacct;
-    if (a === "approve"){ await api("userrole", {user: b.dataset.uid, role: "guest"}); toast("Compte validé. Cochez ses projets."); }
-    else if (a === "reset"){ await api("userreset", {email: b.dataset.email}); toast("Lien de réinitialisation envoyé à " + b.dataset.email + "."); return; }
-    else if (a === "del"){ if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer vraiment ?"; return; } await api("userdel", {user: b.dataset.uid}); toast("Compte supprimé. Ses prises restent."); }
-    else if (a === "mypass"){ await api("mypass", {new: $("#m-new").value}); $("#m-new").value = ""; toast("Mot de passe changé."); return; }
+    if (a === "approve"){ await api("userrole", {user: b.dataset.uid, role: "guest"}); toast(L("Compte validé. Cochez ses projets.", "Account approved. Tick their projects.")); }
+    else if (a === "reset"){ await api("userreset", {email: b.dataset.email}); toast(L("Lien de réinitialisation envoyé à ", "Reset link sent to ") + b.dataset.email + "."); return; }
+    else if (a === "del"){ if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = L("Supprimer vraiment ?", "Really delete?"); return; } await api("userdel", {user: b.dataset.uid}); toast(L("Compte supprimé. Ses prises restent.", "Account deleted. Its takes remain.")); }
+    else if (a === "mypass"){ await api("mypass", {new: $("#m-new").value}); $("#m-new").value = ""; toast(L("Mot de passe changé.", "Password changed.")); return; }
     renderAccountsSB();
   } catch(err) { toast(err.message, true); }
 });
 document.addEventListener("change", async e => {
   const t = e.target; if (!t.dataset || !t.dataset.sbproj) return;
   const projs = [...t.closest("tr").querySelectorAll("[data-sbproj]:checked")].map(x => x.dataset.sbproj).join(",");
-  try { await api("userprojects", {user: t.dataset.uid, projects: projs}); toast("Accès mis à jour."); } catch(err) { toast(err.message, true); t.checked = !t.checked; }
+  try { await api("userprojects", {user: t.dataset.uid, projects: projs}); toast(L("Accès mis à jour.", "Access updated.")); } catch(err) { toast(err.message, true); t.checked = !t.checked; }
 });
 
 /* ================== COMPTES ================== */
@@ -859,23 +945,23 @@ function showGate(mode){
   if (SB) return showGateSB(mode === "setup" ? "signup" : mode);
   const g = $("#gate"); g.hidden = false;
   const setup = mode === "setup";
-  g.innerHTML = '<form id="gateform" autocomplete="on"><div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>' +
-    (setup ? "<p>Première ouverture : créez le compte administrateur. Choisissez vous-même l'identifiant et le mot de passe. Ce lien ne servira plus ensuite : tout le monde se connectera avec son compte.</p>" : "<p>Connectez-vous avec le compte que l'admin vous a donné.</p>") +
-    '<label>Identifiant<input id="g-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>' +
-    '<label>Mot de passe<input id="g-pass" name="password" type="password" autocomplete="' + (setup ? "new-password" : "current-password") + '" required minlength="' + (setup ? 8 : 1) + '"></label>' +
-    (setup ? '<label>Confirmer le mot de passe<input id="g-pass2" type="password" autocomplete="new-password" required minlength="8"></label>' : "") +
-    '<div class="err" id="g-err"></div><button class="btn gold" type="submit">' + (setup ? "Créer le compte admin" : "Se connecter") + "</button></form>";
+  g.innerHTML = '<form id="gateform" autocomplete="on">' + langSwitchHtml() + '<div class="orb" aria-hidden="true"></div><h2>In-House-Dubbing</h2>' +
+    "<p>" + (setup ? L("Première ouverture : créez le compte administrateur. Choisissez vous-même l'identifiant et le mot de passe. Ce lien ne servira plus ensuite : tout le monde se connectera avec son compte.", "First opening: create the administrator account. Choose the username and the password yourself. This link won't be used again afterwards: everyone will sign in with their own account.") : L("Connectez-vous avec le compte que l'admin vous a donné.", "Sign in with the account the admin gave you.")) + "</p>" +
+    '<label>' + L("Identifiant", "Username") + '<input id="g-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>' +
+    '<label>' + L("Mot de passe", "Password") + '<input id="g-pass" name="password" type="password" autocomplete="' + (setup ? "new-password" : "current-password") + '" required minlength="' + (setup ? 8 : 1) + '"></label>' +
+    (setup ? '<label>' + L("Confirmer le mot de passe", "Confirm the password") + '<input id="g-pass2" type="password" autocomplete="new-password" required minlength="8"></label>' : "") +
+    '<div class="err" id="g-err"></div><button class="btn gold" type="submit">' + (setup ? L("Créer le compte admin", "Create the admin account") : L("Se connecter", "Sign in")) + "</button></form>";
   $("#g-user").focus();
   $("#gateform").addEventListener("submit", async e => {
     e.preventDefault();
     const user = $("#g-user").value.trim().toLowerCase(), pass = $("#g-pass").value;
-    if (setup && pass !== $("#g-pass2").value){ $("#g-err").textContent = "Les deux mots de passe ne sont pas identiques."; return; }
+    if (setup && pass !== $("#g-pass2").value){ $("#g-err").textContent = L("Les deux mots de passe ne sont pas identiques.", "The two passwords don't match."); return; }
     const btn = e.target.querySelector("button"); btn.disabled = true;
     try {
       const fd = new FormData(); fd.append("user", user); fd.append("pass", pass); if (setup) fd.append("setup", KEY);
       const r = await fetch("api.php?action=" + (setup ? "setup" : "login"), {method: "POST", body: fd});
       const j = await r.json();
-      if (!j.ok) throw new Error(j.error || "Connexion impossible.");
+      if (!j.ok) throw new Error(j.error || L("Connexion impossible.", "Could not sign in."));
       ME = j.user;
       if (setup) history.replaceState(null, "", location.pathname);
       g.hidden = true; g.innerHTML = "";
@@ -896,33 +982,33 @@ async function renderAccounts(){
   if (SB) return renderAccountsSB();
   const v = $("#view");
   const admin = ME && ME.role === "admin";
-  let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" id="acctback">← Projets</button></div>') + '<div class="seqhead"><h2>' + (admin ? "Comptes" : "Mon compte") + '</h2><p class="summary">' +
-    (admin ? "Les invités enregistrent, convertissent et choisissent les voix des personnages. Seul l'admin gère les comptes, la clé ElevenLabs et les réglages de conversion." : "Connecté en tant que <b>" + esc(ME.name) + "</b>.") + '</p></div><div class="acct">';
+  let h = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" id="acctback">' + L("← Projets", "← Projects") + '</button></div>') + '<div class="seqhead"><h2>' + (admin ? L("Comptes", "Accounts") : L("Mon compte", "My account")) + '</h2><p class="summary">' +
+    (admin ? L("Les invités enregistrent, convertissent et choisissent les voix des personnages. Seul l'admin gère les comptes, la clé ElevenLabs et les réglages de conversion.", "Guests record, convert and choose the characters' voices. Only the admin manages the accounts, the ElevenLabs key and the conversion settings.") : L("Connecté en tant que <b>", "Signed in as <b>") + esc(ME.name) + "</b>.") + '</p></div><div class="acct">';
   if (admin){
-    h += '<div class="box"><h3>Créer un compte</h3><div class="row">' +
-      '<label>Identifiant<input id="a-user" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ex. claire"></label>' +
-      '<label>Mot de passe<input id="a-pass" type="text" autocomplete="off" placeholder="8 caractères minimum"></label>' +
-      '<label>Rôle<select id="a-role"><option value="guest">Invité</option><option value="admin">Admin</option></select></label>' +
-      '<button class="btn gold" type="button" data-acct="add">Créer</button></div>' +
-      '<div><span class="hint" style="font-size:13px">Projets ouverts à ce compte (un admin les voit tous) :</span><div class="projs" id="a-projs"></div></div>' +
-      '<p class="hint" style="margin:0;font-size:13px">Transmettez ensuite à la personne l\'adresse de la page, son identifiant et son mot de passe. Elle pourra changer son mot de passe dans « Mon compte ».</p></div>' +
-      '<div class="box"><h3>Comptes existants</h3><div id="a-list"><p class="none">Chargement…</p></div></div>';
+    h += '<div class="box"><h3>' + L("Créer un compte", "Create an account") + '</h3><div class="row">' +
+      '<label>' + L("Identifiant", "Username") + '<input id="a-user" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="' + L("ex. claire", "e.g. claire") + '"></label>' +
+      '<label>' + L("Mot de passe", "Password") + '<input id="a-pass" type="text" autocomplete="off" placeholder="' + L("8 caractères minimum", "8 characters minimum") + '"></label>' +
+      '<label>' + L("Rôle", "Role") + '<select id="a-role"><option value="guest">' + L("Invité", "Guest") + '</option><option value="admin">Admin</option></select></label>' +
+      '<button class="btn gold" type="button" data-acct="add">' + L("Créer", "Create") + '</button></div>' +
+      '<div><span class="hint" style="font-size:13px">' + L("Projets ouverts à ce compte (un admin les voit tous) :", "Projects open to this account (an admin sees them all):") + '</span><div class="projs" id="a-projs"></div></div>' +
+      '<p class="hint" style="margin:0;font-size:13px">' + L("Transmettez ensuite à la personne l'adresse de la page, son identifiant et son mot de passe. Elle pourra changer son mot de passe dans « Mon compte ».", "Then give the person the page address, their username and their password. They can change their password in “My account”.") + '</p></div>' +
+      '<div class="box"><h3>' + L("Comptes existants", "Existing accounts") + '</h3><div id="a-list"><p class="none">' + L("Chargement…", "Loading…") + '</p></div></div>';
   }
-  h += '<div class="box"><h3>Changer mon mot de passe</h3><div class="row">' +
-    '<label>Mot de passe actuel<input id="m-old" type="password" autocomplete="current-password"></label>' +
-    '<label>Nouveau mot de passe<input id="m-new" type="password" autocomplete="new-password" minlength="8"></label>' +
-    '<button class="btn" type="button" data-acct="mypass">Changer</button></div></div></div>';
+  h += '<div class="box"><h3>' + L("Changer mon mot de passe", "Change my password") + '</h3><div class="row">' +
+    '<label>' + L("Mot de passe actuel", "Current password") + '<input id="m-old" type="password" autocomplete="current-password"></label>' +
+    '<label>' + L("Nouveau mot de passe", "New password") + '<input id="m-new" type="password" autocomplete="new-password" minlength="8"></label>' +
+    '<button class="btn" type="button" data-acct="mypass">' + L("Changer", "Change") + '</button></div></div></div>';
   v.innerHTML = h;
   if ($("#acctback")) $("#acctback").onclick = goHome;
   if (admin){
     try {
       const j = await api("users");
       const all = j.allProjects || [];
-      const boxes = (u, prefix) => all.length ? all.map(p => '<label class="check"><input type="checkbox" data-proj="' + esc(p.id) + '"' + (prefix ? "" : ' data-u="' + esc(u.name) + '"') + ((u && (u.role === "admin" || (u.projects || []).includes(p.id))) || (!u && PID === p.id) ? " checked" : "") + (u && u.role === "admin" ? " disabled" : "") + "> " + esc(p.title) + "</label>").join("") : '<span class="none">Aucun projet importé.</span>';
+      const boxes = (u, prefix) => all.length ? all.map(p => '<label class="check"><input type="checkbox" data-proj="' + esc(p.id) + '"' + (prefix ? "" : ' data-u="' + esc(u.name) + '"') + ((u && (u.role === "admin" || (u.projects || []).includes(p.id))) || (!u && PID === p.id) ? " checked" : "") + (u && u.role === "admin" ? " disabled" : "") + "> " + esc(p.title) + "</label>").join("") : '<span class="none">' + L("Aucun projet importé.", "No project imported.") + '</span>';
       $("#a-projs").innerHTML = boxes(null, true);
-      $("#a-list").innerHTML = '<table><tr><th>Identifiant</th><th>Rôle</th><th>Projets</th><th>Créé le</th><th></th></tr>' + j.users.map(u =>
-        '<tr><td>' + esc(u.name) + (u.name === ME.name ? " (vous)" : "") + '</td><td>' + (u.role === "admin" ? "Admin" : "Invité") + '</td><td><div class="projs">' + (u.role === "admin" ? '<span class="none">Tous</span>' : boxes(u, false)) + '</div></td><td>' + (u.created ? new Date(u.created * 1000).toLocaleDateString("fr-FR") : "—") + '</td><td class="act">' +
-        (u.name === ME.name ? "" : '<button class="btn" type="button" data-acct="reset" data-u="' + esc(u.name) + '">Nouveau mot de passe</button><button class="btn" type="button" data-acct="del" data-u="' + esc(u.name) + '">Supprimer</button>') + "</td></tr>").join("") + "</table>";
+      $("#a-list").innerHTML = '<table><tr><th>' + L("Identifiant", "Username") + '</th><th>' + L("Rôle", "Role") + '</th><th>' + L("Projets", "Projects") + '</th><th>' + L("Créé le", "Created") + '</th><th></th></tr>' + j.users.map(u =>
+        '<tr><td>' + esc(u.name) + (u.name === ME.name ? L(" (vous)", " (you)") : "") + '</td><td>' + (u.role === "admin" ? "Admin" : L("Invité", "Guest")) + '</td><td><div class="projs">' + (u.role === "admin" ? '<span class="none">' + L("Tous", "All") + '</span>' : boxes(u, false)) + '</div></td><td>' + (u.created ? new Date(u.created * 1000).toLocaleDateString(L("fr-FR", "en-GB")) : "—") + '</td><td class="act">' +
+        (u.name === ME.name ? "" : '<button class="btn" type="button" data-acct="reset" data-u="' + esc(u.name) + '">' + L("Nouveau mot de passe", "New password") + '</button><button class="btn" type="button" data-acct="del" data-u="' + esc(u.name) + '">' + L("Supprimer", "Delete") + '</button>') + "</td></tr>").join("") + "</table>";
     } catch(e) { $("#a-list").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
   }
 }
@@ -930,7 +1016,7 @@ document.addEventListener("change", async e => {
   const t = e.target; if (!t.dataset || !t.dataset.proj || !t.dataset.u) return;
   const row = t.closest("tr");
   const projs = [...row.querySelectorAll("[data-proj]:checked")].map(x => x.dataset.proj).join(",");
-  try { await api("userprojects", {user: t.dataset.u, projects: projs}); toast("Accès de « " + t.dataset.u + " » mis à jour."); }
+  try { await api("userprojects", {user: t.dataset.u, projects: projs}); toast(L("Accès de « ", "Access of “") + t.dataset.u + L(" » mis à jour.", "” updated.")); }
   catch(err) { toast(err.message, true); t.checked = !t.checked; }
 });
 document.addEventListener("click", async e => {
@@ -940,16 +1026,16 @@ document.addEventListener("click", async e => {
     if (a === "add"){
       const projs = [...document.querySelectorAll("#a-projs [data-proj]:checked")].map(x => x.dataset.proj).join(",");
       await api("useradd", {user: $("#a-user").value.trim().toLowerCase(), pass: $("#a-pass").value, role: $("#a-role").value, projects: projs});
-      toast("Compte « " + $("#a-user").value.trim().toLowerCase() + " » créé."); renderAccounts();
+      toast(L("Compte « ", "Account “") + $("#a-user").value.trim().toLowerCase() + L(" » créé.", "” created.")); renderAccounts();
     } else if (a === "del"){
-      if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer vraiment ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "Supprimer"; } }, 3000); return; }
-      await api("userdel", {user: b.dataset.u}); toast("Compte « " + b.dataset.u + " » supprimé. Ses prises restent."); renderAccounts();
+      if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = L("Supprimer vraiment ?", "Really delete?"); setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = L("Supprimer", "Delete"); } }, 3000); return; }
+      await api("userdel", {user: b.dataset.u}); toast(L("Compte « ", "Account “") + b.dataset.u + L(" » supprimé. Ses prises restent.", "” deleted. Its takes remain.")); renderAccounts();
     } else if (a === "reset"){
       const row = b.closest("tr");
-      if (!row.querySelector(".r-pass")){ b.insertAdjacentHTML("beforebegin", '<input class="r-pass" type="text" autocomplete="off" placeholder="nouveau mot de passe" style="width:170px">'); b.textContent = "Valider"; row.querySelector(".r-pass").focus(); return; }
-      await api("userreset", {user: b.dataset.u, pass: row.querySelector(".r-pass").value}); toast("Mot de passe de « " + b.dataset.u + " » changé. Ses sessions ouvertes sont fermées."); renderAccounts();
+      if (!row.querySelector(".r-pass")){ b.insertAdjacentHTML("beforebegin", '<input class="r-pass" type="text" autocomplete="off" placeholder="' + L("nouveau mot de passe", "new password") + '" style="width:170px">'); b.textContent = L("Valider", "Confirm"); row.querySelector(".r-pass").focus(); return; }
+      await api("userreset", {user: b.dataset.u, pass: row.querySelector(".r-pass").value}); toast(L("Mot de passe de « ", "Password of “") + b.dataset.u + L(" » changé. Ses sessions ouvertes sont fermées.", "” changed. Their open sessions are closed.")); renderAccounts();
     } else if (a === "mypass"){
-      await api("mypass", {old: $("#m-old").value, new: $("#m-new").value}); $("#m-old").value = $("#m-new").value = ""; toast("Mot de passe changé.");
+      await api("mypass", {old: $("#m-old").value, new: $("#m-new").value}); $("#m-old").value = $("#m-new").value = ""; toast(L("Mot de passe changé.", "Password changed."));
     }
   } catch(err) { toast(err.message, true); }
 });
@@ -957,15 +1043,15 @@ document.addEventListener("click", async e => {
 /* ================== MENU DES PROJETS (la boule) ================== */
 function closePMenu(){ $("#pmenu").hidden = true; $("#brandbtn").setAttribute("aria-expanded", "false"); }
 async function openPMenu(){
-  if (!ONLINE || !ME){ if (!ONLINE) toast("Hors ligne : ouvrez la version en ligne pour changer de projet."); return; }
+  if (!ONLINE || !ME){ if (!ONLINE) toast(L("Hors ligne : ouvrez la version en ligne pour changer de projet.", "Offline: open the online version to switch project.")); return; }
   const m = $("#pmenu"); m.hidden = false; $("#brandbtn").setAttribute("aria-expanded", "true");
-  m.innerHTML = '<span class="none" style="padding:9px 12px">Chargement…</span>';
+  m.innerHTML = '<span class="none" style="padding:9px 12px">' + L("Chargement…", "Loading…") + '</span>';
   let list = [];
   try { list = (await api("projects")).projects; } catch(e) { m.innerHTML = '<span class="none" style="padding:9px 12px">' + esc(e.message) + "</span>"; return; }
   const admin = ME.role === "admin";
-  m.innerHTML = (admin ? '<button type="button" role="menuitem" class="new" data-pm="new">+ Add new project <small>scénario PDF</small></button><hr>' : "") +
-    (list.length ? list.map(p => '<button type="button" role="menuitem" data-pm="' + esc(p.id) + '"' + (p.id === PID ? ' aria-current="true"' : "") + "><span>" + esc(p.title) + "</span><small>" + p.done + "/" + p.lines + "</small></button>").join("") : '<span class="none" style="padding:9px 12px">Aucun projet.</span>') +
-    '<hr><button type="button" role="menuitem" data-pm="home"><span>Tous les projets</span><small>accueil</small></button>';
+  m.innerHTML = (admin ? '<button type="button" role="menuitem" class="new" data-pm="new">+ Add new project <small>' + L("scénario PDF", "PDF script") + '</small></button><hr>' : "") +
+    (list.length ? list.map(p => '<button type="button" role="menuitem" data-pm="' + esc(p.id) + '"' + (p.id === PID ? ' aria-current="true"' : "") + "><span>" + esc(p.title) + "</span><small>" + p.done + "/" + p.lines + "</small></button>").join("") : '<span class="none" style="padding:9px 12px">' + L("Aucun projet.", "No project.") + '</span>') +
+    '<hr><button type="button" role="menuitem" data-pm="home"><span>' + L("Tous les projets", "All projects") + '</span><small>' + L("accueil", "home") + '</small></button>';
   const first = m.querySelector("button"); if (first) first.focus();
 }
 $("#brandbtn").addEventListener("click", e => { e.stopPropagation(); if ($("#pmenu").hidden) openPMenu(); else closePMenu(); });
@@ -980,19 +1066,19 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#pmenu
 async function renderHome(){
   document.title = "In-House-Dubbing";
   $("#apptitle").textContent = "In-House-Dubbing";
-  $("#projlabel").textContent = "Projets";
+  $("#projlabel").textContent = L("Projets", "Projects");
   const v = $("#view");
   const admin = ME && ME.role === "admin";
-  v.innerHTML = '<div class="home"><div class="seqhead"><h2>Projets</h2><p class="summary">' + (admin ? "Chaque projet a son scénario, ses voix IA, ses prises et son dossier sur le PC. Ouvrez un projet, ou importez-en un nouveau (fichier .json préparé à partir du scénario)." : "Les projets qui vous sont ouverts.") + "</p>" +
-    '<div class="elrow">' + (admin ? '<button class="btn gold" type="button" data-homego="-11">+ Add new project</button><label class="btn" for="pimport" style="display:inline-block">Importer un projet (.json)</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
-    '<button class="btn" type="button" data-homeacct>' + (admin ? "Comptes" : "Mon compte") + '</button>' + (admin ? '<button class="btn" type="button" data-homego="-10">Réglages</button>' : "") + '<button class="btn" type="button" data-homego="-12">Guide</button></div>' +
-    '</div><div class="pgrid" id="pgrid"><p class="none">Chargement…</p></div></div>';
+  v.innerHTML = '<div class="home"><div class="seqhead"><h2>' + L("Projets", "Projects") + '</h2><p class="summary">' + (admin ? L("Chaque projet a son scénario, ses voix IA, ses prises et son dossier sur le PC. Ouvrez un projet, ou importez-en un nouveau (fichier .json préparé à partir du scénario).", "Each project has its script, its AI voices, its takes and its folder on the PC. Open a project, or import a new one (a .json file prepared from the script).") : L("Les projets qui vous sont ouverts.", "The projects open to you.")) + "</p>" +
+    '<div class="elrow">' + (admin ? '<button class="btn gold" type="button" data-homego="-11">+ Add new project</button><label class="btn" for="pimport" style="display:inline-block">' + L("Importer un projet (.json)", "Import a project (.json)") + '</label><input type="file" id="pimport" accept=".json,application/json" hidden>' : "") +
+    '<button class="btn" type="button" data-homeacct>' + (admin ? L("Comptes", "Accounts") : L("Mon compte", "My account")) + '</button>' + (admin ? '<button class="btn" type="button" data-homego="-10">' + L("Réglages", "Settings") + '</button>' : "") + '<button class="btn" type="button" data-homego="-12">Guide</button></div>' +
+    '</div><div class="pgrid" id="pgrid"><p class="none">' + L("Chargement…", "Loading…") + '</p></div></div>';
   try {
     const j = await api("projects");
     if (!$("#pgrid")) return;   // la vue a changé pendant le chargement
-    $("#pgrid").innerHTML = j.projects.length ? j.projects.map(p => '<button class="pcard" type="button" data-open="' + esc(p.id) + '"><span class="pn">' + (p.num ? "Projet " + p.num : "Projet") + '</span><h3>' + esc(p.title) + '</h3>' + (p.subtitle ? "<span>" + esc(p.subtitle) + "</span>" : "") +
-      '<span class="bar"><i style="width:' + (p.lines ? 100 * p.done / p.lines : 0) + '%"></i></span><span class="meta">' + p.done + " / " + p.lines + " répliques · " + p.seqs + (p.seqs > 1 ? " séquences · " : " séquence · ") + p.chars + (p.chars > 1 ? " personnages" : " personnage") + "</span></button>").join("")
-      : '<p class="none">' + (admin ? "Aucun projet pour l'instant. Importez le premier." : "Aucun projet ne vous est encore ouvert. Demandez l'accès à l'admin.") + "</p>";
+    $("#pgrid").innerHTML = j.projects.length ? j.projects.map(p => '<button class="pcard" type="button" data-open="' + esc(p.id) + '"><span class="pn">' + (p.num ? L("Projet ", "Project ") + p.num : L("Projet", "Project")) + '</span><h3>' + esc(p.title) + '</h3>' + (p.subtitle ? "<span>" + esc(p.subtitle) + "</span>" : "") +
+      '<span class="bar"><i style="width:' + (p.lines ? 100 * p.done / p.lines : 0) + '%"></i></span><span class="meta">' + p.done + " / " + p.lines + L(" répliques · ", " lines · ") + p.seqs + (p.seqs > 1 ? L(" séquences · ", " sequences · ") : L(" séquence · ", " sequence · ")) + p.chars + (p.chars > 1 ? L(" personnages", " characters") : L(" personnage", " character")) + "</span></button>").join("")
+      : '<p class="none">' + (admin ? L("Aucun projet pour l'instant. Importez le premier.", "No project yet. Import the first one.") : L("Aucun projet ne vous est encore ouvert. Demandez l'accès à l'admin.", "No project is open to you yet. Ask the admin for access.")) + "</p>";
   } catch(e) { if ($("#pgrid")) $("#pgrid").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; }
 }
 function setChrome(inProject){
@@ -1033,7 +1119,7 @@ document.addEventListener("change", async e => {
   const fd = new FormData(); fd.append("file", e.target.files[0]);
   try {
     const j = await api("projectimport", fd);
-    toast("Projet « " + j.id + " » " + (j.updated ? "mis à jour (les prises sont conservées)." : "importé.") + (j.migrated ? " Les prises de l'ancienne installation ont été reprises." : ""));
+    toast(L("Projet « ", "Project “") + j.id + L(" » ", "” ") + (j.updated ? L("mis à jour (les prises sont conservées).", "updated (the takes are kept).") : L("importé.", "imported.")) + (j.migrated ? L(" Les prises de l'ancienne installation ont été reprises.", " The takes of the old installation were brought over.") : ""));
     renderHome();
   } catch(err) { toast(err.message, true); }
   e.target.value = "";
@@ -1041,7 +1127,14 @@ document.addEventListener("change", async e => {
 
 /* ================== GUIDE ================== */
 function renderGuide(){
-  const steps = [
+  const steps = LANG === "en" ? [
+    ["Install (once)", "<p><b>With PHP 8 hosting</b>: upload <code>index.html</code>, <code>api.php</code> and <code>.htaccess</code> to a folder of the site, copy <code>config.sample.php</code> to <code>config.php</code> with a long random setup key, then open <code>…/?k=YOUR_KEY</code> to create the admin account.</p><p><b>Without a server, with Supabase</b> (free to start): create a project on supabase.com, run <code>supabase/schema.sql</code> in the SQL Editor, deploy the <code>ihd</code> function, then put <code>index.html</code> online with a <code>supabase-config.js</code> (project address and public key). The first account created becomes admin. The details are in GUIDE.md.</p>"],
+    ["Set the keys", "<p><b>Claude</b> (Home › Settings) prepares projects from a PDF: summaries, acting intentions, voice directions. <b>ElevenLabs</b> (in a project, “IA Voice selector” tab) transforms the takes with one voice per character, and the Generate button reads the lines straight from the text. The keys stay on the server and are never shown; usage is charged to your accounts.</p>"],
+    ["Create a project from a script", "<p>Home, or the yellow orb at the top left › “+ Add new project”. Choose the PDF, give a title, click “Analyse”. With a Claude key, “Enrich with Claude” adds the working sequences, the summaries, the intentions and the vocal sounds. Check the preview, then “Create the project”. The PDF must use the standard screenplay layout and contain text (not a scan).</p>"],
+    ["Choose the AI voices", "<p>In the project, “IA Voice selector” tab: one ElevenLabs voice per character. Tick “Automatic AI voice” to convert each take as soon as it is sent. If a voice doesn't work, change it: “↻ Redo their takes” converts everything again from the originals, which are never overwritten.</p>"],
+    ["Invite the voice actor", "<p>Home › Accounts › Create an account: username, password and open projects, then send them the page address (without <code>?k=</code>), their username and their password. With Supabase, they create their own account on the sign-in page and you approve it in Accounts. They pick a sequence, click a character under the title to see only their lines, and press Rec (or Space) next to each line, ideally wearing headphones.</p>"],
+    ["Get the takes", "<p>In Chrome or Edge, open the project and click “Audio transfer”, then choose the project folder on your computer. The kept take of each line goes into its sequence folder (<code>SEQ01_L02_CHARACTER.wav</code>), every original and AI take into <code>_prises</code>. The transfer also drops <code>In-House-Dubbing.html</code> to listen again offline.</p>"]
+  ] : [
     ["Installer (une seule fois)", "<p><b>Avec un hébergement PHP 8</b> : envoyez <code>index.html</code>, <code>api.php</code> et <code>.htaccess</code> dans un dossier du site, copiez <code>config.sample.php</code> en <code>config.php</code> avec une longue clé d'installation au hasard, puis ouvrez <code>…/?k=VOTRE_CLE</code> pour créer le compte admin.</p><p><b>Sans serveur, avec Supabase</b> (gratuit pour commencer) : créez un projet sur supabase.com, exécutez <code>supabase/schema.sql</code> dans le SQL Editor, déployez la fonction <code>ihd</code>, puis mettez en ligne <code>index.html</code> avec un <code>supabase-config.js</code> (adresse du projet et clé publique). Le premier compte créé devient admin. Le détail est dans GUIDE.md.</p>"],
     ["Régler les clés", "<p><b>Claude</b> (Accueil › Réglages) prépare les projets à partir d'un PDF : résumés, intentions de jeu, directions de voix. <b>ElevenLabs</b> (dans un projet, onglet « IA Voice selector ») transforme les prises avec une voix par personnage. Les clés restent sur le serveur et ne sont jamais affichées ; les consommations sont décomptées sur vos comptes.</p>"],
     ["Créer un projet depuis un scénario", "<p>Accueil, ou la boule jaune en haut à gauche › « + Add new project ». Choisissez le PDF, donnez un titre, cliquez « Analyser ». Avec une clé Claude, « Enrichir avec Claude » ajoute le découpage en séquences de travail, les résumés, les intentions et les sons vocaux. Vérifiez l'aperçu, puis « Créer le projet ». Le PDF doit avoir la mise en page standard d'un scénario et contenir du texte (pas un scan).</p>"],
@@ -1049,8 +1142,8 @@ function renderGuide(){
     ["Inviter la personne qui fait les voix", "<p>Accueil › Comptes › Créer un compte : identifiant, mot de passe et projets ouverts, puis envoyez-lui l'adresse de la page (sans <code>?k=</code>), son identifiant et son mot de passe. Avec Supabase, elle crée elle-même son compte sur la page de connexion et vous la validez dans Comptes. Elle choisit une séquence, clique sur un personnage sous le titre pour ne voir que ses répliques, et appuie sur Rec (ou Espace) en face de chaque ligne, de préférence avec un casque.</p>"],
     ["Récupérer les prises", "<p>Dans Chrome ou Edge, ouvrez le projet et cliquez « Transfert audio », puis choisissez le dossier du projet sur votre ordinateur. La prise retenue de chaque réplique arrive dans le dossier de sa séquence (<code>SEQ01_L02_PERSONNAGE.wav</code>), toutes les prises originales et IA dans <code>_prises</code>. Le transfert dépose aussi <code>In-House-Dubbing.html</code> pour réécouter hors ligne.</p>"]
   ];
-  $("#view").innerHTML = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>') +
-    '<div class="seqhead"><h2>Guide de démarrage</h2><p class="summary">De l\'installation à la récupération des prises, en six étapes. Les détails sur l\'enregistrement sont dans « Mode d\'emploi », à l\'intérieur de chaque projet.</p></div>' +
+  $("#view").innerHTML = (PID ? "" : '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>' + L("← Projets", "← Projects") + '</button></div>') +
+    '<div class="seqhead"><h2>' + L("Guide de démarrage", "Getting started") + '</h2><p class="summary">' + L("De l'installation à la récupération des prises, en six étapes. Les détails sur l'enregistrement sont dans « Mode d'emploi », à l'intérieur de chaque projet.", "From installation to getting the takes, in six steps. The details about recording are in “How it works”, inside each project.") + '</p></div>' +
     '<div class="help">' + steps.map((s, i) => '<div class="box"><h3>' + (i + 1) + " · " + s[0] + "</h3>" + s[1] + "</div>").join("") + "</div>";
 }
 
@@ -1058,28 +1151,28 @@ function renderGuide(){
 let AI = null;   // {hasKey, keyHint, model, models}
 async function renderSettings(){
   const v = $("#view");
-  v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div><div class="seqhead"><h2>Réglages</h2><p class="summary">Les clés API sont gardées sur le serveur de cette installation. Elles ne sont jamais affichées ni envoyées aux navigateurs, et ne font pas partie du code : chaque installation a les siennes.</p></div><div class="acct" id="setbox"><p class="none">Chargement…</p></div>';
+  v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>' + L("← Projets", "← Projects") + '</button></div><div class="seqhead"><h2>' + L("Réglages", "Settings") + '</h2><p class="summary">' + L("Les clés API sont gardées sur le serveur de cette installation. Elles ne sont jamais affichées ni envoyées aux navigateurs, et ne font pas partie du code : chaque installation a les siennes.", "The API keys are kept on the server of this installation. They are never shown or sent to browsers, and are not part of the code: each installation has its own.") + '</p></div><div class="acct" id="setbox"><p class="none">' + L("Chargement…", "Loading…") + '</p></div>';
   try { AI = (await api("aiconfig")).ai; } catch(e) { $("#setbox").innerHTML = '<p class="none">' + esc(e.message) + "</p>"; return; }
   const models = Object.entries(AI.models).map(([k, n]) => '<option value="' + k + '"' + (k === AI.model ? " selected" : "") + ">" + esc(n) + "</option>").join("");
-  $("#setbox").innerHTML = '<div class="box"><h3>Claude · préparation des projets</h3>' +
-    '<p class="hint" style="margin:0;font-size:13.5px">Sert à l\'import d\'un scénario PDF : Claude découpe les séquences par temps dramatiques, écrit les résumés, les intentions de jeu sous chaque réplique et la direction de voix de chaque personnage. Facultatif : sans clé, l\'import découpe quand même le scénario, sans ces textes.</p>' +
-    (AI.hasKey ? '<div class="row"><span class="ok">Clé enregistrée (…' + esc(AI.keyHint) + ')</span><button class="btn" type="button" data-ai="del">Retirer la clé</button></div>'
-               : '<div class="row"><input type="password" id="aikey" placeholder="Clé API Claude (sk-ant-…)" autocomplete="off" spellcheck="false" style="width:min(380px,100%)"><button class="btn gold" type="button" data-ai="save">Enregistrer la clé</button></div><p class="hint" style="margin:0;font-size:13px">Une clé se crée sur console.anthropic.com, rubrique API Keys.</p>') +
-    '<div class="row"><label>Modèle<select id="aimodel">' + models + '</select></label></div></div>' +
-    '<div class="box"><h3>ElevenLabs · voix IA</h3><p class="hint" style="margin:0;font-size:13.5px">La clé ElevenLabs se règle dans un projet, onglet « IA Voice selector ». Elle vaut pour tous les projets de cette installation.</p></div>';
+  $("#setbox").innerHTML = '<div class="box"><h3>' + L("Claude · préparation des projets", "Claude · project preparation") + '</h3>' +
+    '<p class="hint" style="margin:0;font-size:13.5px">' + L("Sert à l'import d'un scénario PDF : Claude découpe les séquences par temps dramatiques, écrit les résumés, les intentions de jeu sous chaque réplique et la direction de voix de chaque personnage. Facultatif : sans clé, l'import découpe quand même le scénario, sans ces textes.", "Used to import a PDF script: Claude splits the sequences by dramatic beats, writes the summaries, the acting intention under each line and the voice direction of each character. Optional: without a key, the import still splits the script, without these texts.") + '</p>' +
+    (AI.hasKey ? '<div class="row"><span class="ok">' + L("Clé enregistrée (…", "Key saved (…") + esc(AI.keyHint) + ')</span><button class="btn" type="button" data-ai="del">' + L("Retirer la clé", "Remove the key") + '</button></div>'
+               : '<div class="row"><input type="password" id="aikey" placeholder="' + L("Clé API Claude (sk-ant-…)", "Claude API key (sk-ant-…)") + '" autocomplete="off" spellcheck="false" style="width:min(380px,100%)"><button class="btn gold" type="button" data-ai="save">' + L("Enregistrer la clé", "Save the key") + '</button></div><p class="hint" style="margin:0;font-size:13px">' + L("Une clé se crée sur console.anthropic.com, rubrique API Keys.", "Create a key on console.anthropic.com, under API Keys.") + '</p>') +
+    '<div class="row"><label>' + L("Modèle", "Model") + '<select id="aimodel">' + models + '</select></label></div></div>' +
+    '<div class="box"><h3>' + L("ElevenLabs · voix IA", "ElevenLabs · AI voices") + '</h3><p class="hint" style="margin:0;font-size:13.5px">' + L("La clé ElevenLabs se règle dans un projet, onglet « IA Voice selector ». Elle vaut pour tous les projets de cette installation.", "The ElevenLabs key is set in a project, “IA Voice selector” tab. It applies to every project of this installation.") + '</p></div>';
 }
 document.addEventListener("click", async e => {
   if (e.target.closest("[data-gohome]")){ goHome(); return; }
   const b = e.target.closest("[data-ai]"); if (!b) return;
   try {
-    if (b.dataset.ai === "save"){ const key = $("#aikey").value.trim(); if (!key) return; b.disabled = true; b.textContent = "Vérification…"; AI = (await api("aikey", {key})).ai; toast("Clé Claude vérifiée et enregistrée."); }
-    else { if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Retirer vraiment ?"; return; } AI = (await api("aikey", {key: ""})).ai; toast("Clé Claude retirée."); }
+    if (b.dataset.ai === "save"){ const key = $("#aikey").value.trim(); if (!key) return; b.disabled = true; b.textContent = L("Vérification…", "Checking…"); AI = (await api("aikey", {key})).ai; toast(L("Clé Claude vérifiée et enregistrée.", "Claude key checked and saved.")); }
+    else { if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = L("Retirer vraiment ?", "Really remove?"); return; } AI = (await api("aikey", {key: ""})).ai; toast(L("Clé Claude retirée.", "Claude key removed.")); }
   } catch(err) { toast(err.message, true); }
   renderSettings();
 });
 document.addEventListener("change", async e => {
   if (e.target.id !== "aimodel") return;
-  try { AI = (await api("aimodel", {model: e.target.value})).ai; toast("Modèle : " + AI.models[AI.model]); } catch(err) { toast(err.message, true); }
+  try { AI = (await api("aimodel", {model: e.target.value})).ai; toast(L("Modèle : ", "Model: ") + AI.models[AI.model]); } catch(err) { toast(err.message, true); }
 });
 
 /* ================== NOUVEAU PROJET DEPUIS UN PDF ================== */
@@ -1089,7 +1182,7 @@ let IMP = null;   // brouillon d'import en cours
 
 async function loadPdfJs(){
   if (window.pdfjsLib) return;
-  await new Promise((ok, ko) => { const s = document.createElement("script"); s.src = PDFJS_BASE + "pdf.min.js"; s.onload = ok; s.onerror = () => ko(new Error("Le lecteur PDF n'a pas pu être chargé.")); document.head.appendChild(s); });
+  await new Promise((ok, ko) => { const s = document.createElement("script"); s.src = PDFJS_BASE + "pdf.min.js"; s.onload = ok; s.onerror = () => ko(new Error(L("Le lecteur PDF n'a pas pu être chargé.", "The PDF reader could not be loaded."))); document.head.appendChild(s); });
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + "pdf.worker.min.js";
 }
 // Lignes du PDF avec leur position (x = retrait, y = hauteur), dans l'ordre de lecture.
@@ -1127,7 +1220,7 @@ const slugify = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().re
 function parseScreenplay(raw){
   const lines = raw.map(l => ({...l, text: l.text.replace(/\s+\*+$/, "").replace(/^\*+\s+/, "").trim()}))
     .filter(l => l.text && !/^\*+$/.test(l.text) && !/^\d+\.?$/.test(l.text) && !/Rev\.\s*\(|\(mm\/dd\/yy\)|^\(?MORE\)?$|^CONTINUED:?$|^\(CONTINUED\)$/i.test(l.text));
-  if (!lines.length) throw new Error("Aucun texte lisible dans ce PDF. S'il s'agit d'un scan, il faut d'abord le passer à l'OCR.");
+  if (!lines.length) throw new Error(L("Aucun texte lisible dans ce PDF. S'il s'agit d'un scan, il faut d'abord le passer à l'OCR.", "No readable text in this PDF. If it is a scan, run it through OCR first."));
   const hist = {};
   lines.filter(l => l.text.length > 35).forEach(l => { const k = Math.round(l.x / 3) * 3; hist[k] = (hist[k] || 0) + 1; });
   const A = +(Object.entries(hist).sort((a, b) => b[1] - a[1])[0] || [lines[0].x])[0];
@@ -1180,14 +1273,14 @@ function parseScreenplay(raw){
     it.ch = k; chars[k].count++;
     it.n = ++li;
   });
-  if (!li) throw new Error("Aucune réplique trouvée. Le PDF n'a peut-être pas la mise en page standard d'un scénario (noms des personnages centrés au-dessus des répliques).");
+  if (!li) throw new Error(L("Aucune réplique trouvée. Le PDF n'a peut-être pas la mise en page standard d'un scénario (noms des personnages centrés au-dessus des répliques).", "No line found. The PDF may not use the standard screenplay layout (character names centred above the lines)."));
   return {items: out, chars, lines: li};
 }
 // Séquences par défaut : une par en-tête de scène (coupée au-delà de 40 répliques).
 function defaultSequences(d){
   const seqs = []; let curS = null;
   d.items.forEach(it => {
-    if (it.type === "slug" || !curS){ curS = {title: it.type === "slug" ? it.text : "Ouverture", slug: it.type === "slug" ? it.text : "", lines: [], first: it.page, last: it.page}; seqs.push(curS); if (it.type === "slug") return; }
+    if (it.type === "slug" || !curS){ curS = {title: it.type === "slug" ? it.text : L("Ouverture", "Opening"), slug: it.type === "slug" ? it.text : "", lines: [], first: it.page, last: it.page}; seqs.push(curS); if (it.type === "slug") return; }
     curS.last = it.page;
     if (it.type === "line") curS.lines.push(it.n);
   });
@@ -1210,11 +1303,12 @@ function parseJson(text){
   return JSON.parse(raw.slice(a, b + 1));
 }
 async function claude(system, prompt, max){ const j = await api("claude", {system, prompt, max: String(max)}); return j.text; }
-const SYS = "Tu prépares des sessions d'enregistrement de voix maquettes pour un film d'animation. Tu écris en français, de façon concrète et brève, pour un comédien. Tu réponds uniquement avec du JSON valide, sans aucun texte autour.";
+// Les textes écrits par Claude (résumés, intentions, voix) suivent la langue de l'interface au moment de l'import.
+const SYS = "Tu prépares des sessions d'enregistrement de voix maquettes pour un film d'animation. " + L("Tu écris en français", "Tu écris en anglais (all summaries, voice directions and intentions in English)") + ", de façon concrète et brève, pour un comédien. Tu réponds uniquement avec du JSON valide, sans aucun texte autour.";
 
 async function enrichWithClaude(d, status){
   const keys = Object.keys(d.chars).map(k => k + " = " + d.chars[k].cue).join(", ");
-  status("Claude lit le scénario et le découpe en séquences…");
+  status(L("Claude lit le scénario et le découpe en séquences…", "Claude is reading the script and splitting it into sequences…"));
   const t1 = await claude(SYS, "Voici un scénario. Chaque réplique est numérotée [L1], [L2]…\n\n" + screenplayText(d) +
     "\n\nPrépare l'enregistrement. Réponds avec ce JSON :\n" +
     '{"sequences":[{"start":1,"title":"titre court","summary":"2 à 4 phrases : ce qui se passe, qui est là, l\'enjeu"}],' +
@@ -1233,12 +1327,12 @@ async function enrichWithClaude(d, status){
   seqs.forEach(s => s.slug = slugOf(s.start));
   Object.entries(r1.characters || {}).forEach(([k, c]) => { if (d.chars[k]){ if (c.name) d.chars[k].n = String(c.name).slice(0, 40); d.chars[k].v = String(c.voice || ""); } });
   const vocals = (r1.vocals || []).filter(v => v && v.text && +v.after >= 0 && +v.after <= d.lines).map(v => ({after: +v.after, ch: charKey(String(v.char || "GROUPE")) || "GROUPE", text: String(v.text), dir: String(v.dir || "")}));
-  vocals.forEach(v => { if (!d.chars[v.ch]) d.chars[v.ch] = {n: v.ch === "GROUPE" ? "Groupe" : titleCase(v.ch), count: 0, cue: v.ch, v: v.ch === "GROUPE" ? "Sons collectifs : efforts, chutes, cris." : ""}; });
+  vocals.forEach(v => { if (!d.chars[v.ch]) d.chars[v.ch] = {n: v.ch === "GROUPE" ? L("Groupe", "Group") : titleCase(v.ch), count: 0, cue: v.ch, v: v.ch === "GROUPE" ? L("Sons collectifs : efforts, chutes, cris.", "Group sounds: efforts, falls, screams.") : ""}; });
   // Intentions de jeu, séquence par séquence.
   const dirs = {};
   for (let i = 0; i < seqs.length; i++){
     const from = seqs[i].start, to = i + 1 < seqs.length ? seqs[i+1].start - 1 : d.lines;
-    status("Claude écrit les intentions de jeu · séquence " + (i + 1) + "/" + seqs.length + "…");
+    status(L("Claude écrit les intentions de jeu · séquence ", "Claude is writing the acting intentions · sequence ") + (i + 1) + "/" + seqs.length + "…");
     const t2 = await claude(SYS, "Scénario complet pour le contexte :\n\n" + screenplayText(d, from, to) +
       "\n\nÉcris l'intention de jeu des répliques [L" + from + "] à [L" + to + "] : une phrase courte par réplique pour le comédien (état, intention, ce qu'il faut appuyer, éventuellement le geste ou la situation). Réponds avec ce JSON : {\"L" + from + "\":\"…\", …}", 6000);
     try { Object.assign(dirs, parseJson(t2)); } catch(e) {}
@@ -1262,7 +1356,7 @@ function buildProject(d, meta, enr){
     }
     for (let k = 0; k < rows.length; k += 99) seqs.push({title: s.title + (rows.length > 99 ? " (" + (k / 99 + 1) + ")" : ""), slug: s.slug || "", summary: s.summary || "", rows: rows.slice(k, k + 99)});
   });
-  if (seqs.length > 99) throw new Error("Plus de 99 séquences : découpez le scénario en plusieurs projets.");
+  if (seqs.length > 99) throw new Error(L("Plus de 99 séquences : découpez le scénario en plusieurs projets.", "More than 99 sequences: split the script into several projects."));
   const chars = {};
   Object.keys(d.chars).forEach((k, i) => chars[k] = {n: d.chars[k].n, c: PALETTE[i % PALETTE.length], v: d.chars[k].v || ""});
   return {
@@ -1279,29 +1373,29 @@ function buildProject(d, meta, enr){
 
 function renderImport(){
   const v = $("#view");
-  v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>← Projets</button></div>' +
-    '<div class="seqhead"><h2>Add new project</h2><p class="summary">Déposez le scénario en PDF (mise en page standard : en-têtes de scène, noms des personnages au-dessus des répliques). L\'appli repère les séquences, les personnages et chaque réplique. Avec une clé Claude, elle écrit aussi les résumés, les intentions de jeu et les directions de voix.</p></div>' +
-    '<div class="acct"><div class="box"><h3>1 · Le scénario</h3><div class="row">' +
-    '<label>Fichier PDF<input type="file" id="imp-file" accept="application/pdf,.pdf"></label></div><div class="row">' +
-    '<label>Titre du projet<input id="imp-title" placeholder="ex. Mon court métrage"></label>' +
-    '<label>Identifiant<input id="imp-id" placeholder="mon-court-metrage" autocapitalize="none" spellcheck="false"></label>' +
-    '<label>Sous-titre (facultatif)<input id="imp-sub" placeholder="ex. Studio · client"></label></div>' +
-    '<div class="row"><button class="btn gold" type="button" id="imp-go">Analyser le PDF</button><span class="hint" id="imp-status" style="font-size:13.5px"></span></div></div>' +
+  v.innerHTML = '<div style="margin-bottom:12px"><button class="btn" type="button" data-gohome>' + L("← Projets", "← Projects") + '</button></div>' +
+    '<div class="seqhead"><h2>Add new project</h2><p class="summary">' + L("Déposez le scénario en PDF (mise en page standard : en-têtes de scène, noms des personnages au-dessus des répliques). L'appli repère les séquences, les personnages et chaque réplique. Avec une clé Claude, elle écrit aussi les résumés, les intentions de jeu et les directions de voix.", "Drop the script as a PDF (standard layout: scene headings, character names above the lines). The app finds the sequences, the characters and every line. With a Claude key, it also writes the summaries, the acting intentions and the voice directions.") + '</p></div>' +
+    '<div class="acct"><div class="box"><h3>' + L("1 · Le scénario", "1 · The script") + '</h3><div class="row">' +
+    '<label>' + L("Fichier PDF", "PDF file") + '<input type="file" id="imp-file" accept="application/pdf,.pdf"></label></div><div class="row">' +
+    '<label>' + L("Titre du projet", "Project title") + '<input id="imp-title" placeholder="' + L("ex. Mon court métrage", "e.g. My short film") + '"></label>' +
+    '<label>' + L("Identifiant", "Id") + '<input id="imp-id" placeholder="' + L("mon-court-metrage", "my-short-film") + '" autocapitalize="none" spellcheck="false"></label>' +
+    '<label>' + L("Sous-titre (facultatif)", "Subtitle (optional)") + '<input id="imp-sub" placeholder="' + L("ex. Studio · client", "e.g. Studio · client") + '"></label></div>' +
+    '<div class="row"><button class="btn gold" type="button" id="imp-go">' + L("Analyser le PDF", "Analyse the PDF") + '</button><span class="hint" id="imp-status" style="font-size:13.5px"></span></div></div>' +
     '<div id="imp-result"></div></div>';
 }
 function renderDraft(){
   const d = IMP.draft, p = IMP.project;
   const ai = AI && AI.hasKey;
   const nl = p.seqs.reduce((a, s) => a + s.lines.length, 0);
-  $("#imp-result").innerHTML = '<div class="box"><h3>2 · Ce que l\'appli a trouvé</h3>' +
-    '<p style="margin:0">' + p.seqs.length + " séquence(s) · " + Object.keys(p.chars).length + " personnage(s) · " + nl + " réplique(s)" + (IMP.enriched ? " · enrichi par Claude" : "") + "</p>" +
-    '<table><tr><th>Personnage</th><th>Clé</th><th>Répliques</th><th>Voix</th></tr>' + Object.entries(p.chars).map(([k, c]) =>
+  $("#imp-result").innerHTML = '<div class="box"><h3>' + L("2 · Ce que l'appli a trouvé", "2 · What the app found") + '</h3>' +
+    '<p style="margin:0">' + p.seqs.length + L(" séquence(s) · ", " sequence(s) · ") + Object.keys(p.chars).length + L(" personnage(s) · ", " character(s) · ") + nl + L(" réplique(s)", " line(s)") + (IMP.enriched ? L(" · enrichi par Claude", " · enriched by Claude") : "") + "</p>" +
+    '<table><tr><th>' + L("Personnage", "Character") + '</th><th>' + L("Clé", "Key") + '</th><th>' + L("Répliques", "Lines") + '</th><th>' + L("Voix", "Voice") + '</th></tr>' + Object.entries(p.chars).map(([k, c]) =>
       '<tr><td><span class="chip" style="--c:' + c.c + '"><i></i>' + esc(c.n) + '</span></td><td class="label">' + k + "</td><td>" + p.seqs.reduce((a, s) => a + s.lines.filter(l => l[1] === k).length, 0) + '</td><td style="font-size:13px">' + esc(c.v || "—") + "</td></tr>").join("") + "</table>" +
-    '<table><tr><th>Séquence</th><th>Répliques</th><th>Résumé</th></tr>' + p.seqs.map(s => "<tr><td><b>" + s.id + "</b> " + esc(s.title) + "</td><td>" + s.lines.length + '</td><td style="font-size:13px">' + esc(s.summary || "—") + "</td></tr>").join("") + "</table></div>" +
-    '<div class="box"><h3>3 · Finaliser</h3><div class="row">' +
-    (IMP.enriched ? "" : (ai ? '<button class="btn" type="button" id="imp-ai">Enrichir avec Claude (résumés, intentions, voix)</button>' : '<span class="hint" style="font-size:13.5px">Ajoutez une clé Claude dans Réglages pour obtenir les résumés, intentions et directions de voix.</span>')) +
-    '<button class="btn gold" type="button" id="imp-create">Créer le projet</button><button class="btn" type="button" id="imp-dl">Télécharger le .json</button></div>' +
-    '<p class="hint" style="margin:0;font-size:13px">Réimporter plus tard un fichier avec le même identifiant met à jour le scénario sans toucher aux prises.</p></div>';
+    '<table><tr><th>' + L("Séquence", "Sequence") + '</th><th>' + L("Répliques", "Lines") + '</th><th>' + L("Résumé", "Summary") + '</th></tr>' + p.seqs.map(s => "<tr><td><b>" + s.id + "</b> " + esc(s.title) + "</td><td>" + s.lines.length + '</td><td style="font-size:13px">' + esc(s.summary || "—") + "</td></tr>").join("") + "</table></div>" +
+    '<div class="box"><h3>' + L("3 · Finaliser", "3 · Finish") + '</h3><div class="row">' +
+    (IMP.enriched ? "" : (ai ? '<button class="btn" type="button" id="imp-ai">' + L("Enrichir avec Claude (résumés, intentions, voix)", "Enrich with Claude (summaries, intentions, voices)") + '</button>' : '<span class="hint" style="font-size:13.5px">' + L("Ajoutez une clé Claude dans Réglages pour obtenir les résumés, intentions et directions de voix.", "Add a Claude key in Settings to get the summaries, intentions and voice directions.") + '</span>')) +
+    '<button class="btn gold" type="button" id="imp-create">' + L("Créer le projet", "Create the project") + '</button><button class="btn" type="button" id="imp-dl">' + L("Télécharger le .json", "Download the .json") + '</button></div>' +
+    '<p class="hint" style="margin:0;font-size:13px">' + L("Réimporter plus tard un fichier avec le même identifiant met à jour le scénario sans toucher aux prises.", "Importing a file with the same id later updates the script without touching the takes.") + '</p></div>';
 }
 document.addEventListener("input", e => {
   if (e.target.id === "imp-title" && !IMP?.idTouched) $("#imp-id").value = slugify(e.target.value).slice(0, 40);
@@ -1316,13 +1410,13 @@ document.addEventListener("click", async e => {
   if (t.id === "imp-go"){
     const f = $("#imp-file").files[0];
     const meta = {title: $("#imp-title").value.trim(), id: $("#imp-id").value.trim(), subtitle: $("#imp-sub").value.trim(), source: f ? f.name : ""};
-    if (!f){ toast("Choisissez d'abord le PDF du scénario.", true); return; }
-    if (!meta.title || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(meta.id)){ toast("Donnez un titre et un identifiant (minuscules, chiffres, tirets).", true); return; }
+    if (!f){ toast(L("Choisissez d'abord le PDF du scénario.", "Choose the script PDF first."), true); return; }
+    if (!meta.title || !/^[a-z0-9][a-z0-9-]{1,39}$/.test(meta.id)){ toast(L("Donnez un titre et un identifiant (minuscules, chiffres, tirets).", "Give a title and an id (lowercase letters, digits, hyphens)."), true); return; }
     t.disabled = true;
     try {
-      status("Lecture du PDF…"); await loadPdfJs();
+      status(L("Lecture du PDF…", "Reading the PDF…")); await loadPdfJs();
       const raw = await pdfLines(f);
-      status("Découpe du scénario…");
+      status(L("Découpe du scénario…", "Splitting the script…"));
       const draft = parseScreenplay(raw);
       try { AI = (await api("aiconfig")).ai; } catch(err) {}
       IMP = {...(IMP || {}), draft, meta, enriched: false};
@@ -1335,8 +1429,8 @@ document.addEventListener("click", async e => {
     t.disabled = true;
     try {
       const enr = await enrichWithClaude(IMP.draft, m => { t.textContent = m; });
-      IMP.project = buildProject(IMP.draft, IMP.meta, enr); IMP.enriched = true; renderDraft(); toast("Projet enrichi par Claude.");
-    } catch(err) { toast("Enrichissement interrompu : " + err.message, true); t.disabled = false; t.textContent = "Réessayer l'enrichissement avec Claude"; }
+      IMP.project = buildProject(IMP.draft, IMP.meta, enr); IMP.enriched = true; renderDraft(); toast(L("Projet enrichi par Claude.", "Project enriched by Claude."));
+    } catch(err) { toast(L("Enrichissement interrompu : ", "Enrichment stopped: ") + err.message, true); t.disabled = false; t.textContent = L("Réessayer l'enrichissement avec Claude", "Try enriching with Claude again"); }
   }
   if (t.id === "imp-dl"){
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(IMP.project, null, 1)], {type: "application/json"})); a.download = IMP.project.id + ".json"; a.click();
@@ -1346,7 +1440,7 @@ document.addEventListener("click", async e => {
     try {
       const fd = new FormData(); fd.append("file", new Blob([JSON.stringify(IMP.project)], {type: "application/json"}), IMP.project.id + ".json");
       const j = await api("projectimport", fd);
-      toast("Projet « " + IMP.project.title + " » " + (j.updated ? "mis à jour." : "créé."));
+      toast(L("Projet « ", "Project “") + IMP.project.title + L(" » ", "” ") + (j.updated ? L("mis à jour.", "updated.") : L("créé.", "created.")));
       const id = IMP.project.id; IMP = null; openProject(id);
     } catch(err) { toast(err.message, true); t.disabled = false; }
   }
@@ -1360,16 +1454,16 @@ function play(id, file){
   stopSeq(true);
   const u = audioUrl(id, file); if (!u) return;
   player.src = u; player.currentTime = 0;
-  player.play().then(() => markPlaying(id)).catch(e => toast("Lecture impossible : " + e.message, true));
+  player.play().then(() => markPlaying(id)).catch(e => toast(L("Lecture impossible : ", "Playback failed: ") + e.message, true));
   player.onended = () => markPlaying(null);
 }
-function stopSeq(keepPlayer){ if (seqPlay){ seqPlay = null; $("#playseq").textContent = "▶ Lire la séquence"; } if (!keepPlayer){ player.pause(); markPlaying(null); } }
+function stopSeq(keepPlayer){ if (seqPlay){ seqPlay = null; $("#playseq").textContent = L("▶ Lire la séquence", "▶ Play the sequence"); } if (!keepPlayer){ player.pause(); markPlaying(null); } }
 function playSeq(){
   if (seqPlay){ stopSeq(); return; }
   const ids = visibleLines(cur).map(l => l.id).filter(hasAudio);
-  if (!ids.length){ toast("Aucune prise à lire dans cette séquence pour l'instant."); return; }
+  if (!ids.length){ toast(L("Aucune prise à lire dans cette séquence pour l'instant.", "No take to play in this sequence yet.")); return; }
   seqPlay = {ids, i: 0};
-  $("#playseq").textContent = "■ Arrêter";
+  $("#playseq").textContent = L("■ Arrêter", "■ Stop");
   const next = () => {
     if (!seqPlay) return;
     if (seqPlay.i >= seqPlay.ids.length){ stopSeq(); return; }
@@ -1388,7 +1482,7 @@ const WORKLET = "class P extends AudioWorkletProcessor{process(i){const c=i[0]&&
 
 async function ensureMic(){
   if (stream && stream.active) return;
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Ce navigateur ne donne pas accès au micro. Utilisez Chrome, Edge, Safari ou Firefox récent.");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error(L("Ce navigateur ne donne pas accès au micro. Utilisez Chrome, Edge, Safari ou Firefox récent.", "This browser gives no access to the mic. Use a recent Chrome, Edge, Safari or Firefox."));
   const dev = $("#mic").value;
   const a = {echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1};
   if (dev) a.deviceId = {exact: dev};
@@ -1405,13 +1499,13 @@ async function fillMics(){
   try {
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
     const sel = $("#mic"), v = sel.value || store.get("mic") || "";
-    sel.innerHTML = '<option value="">Micro par défaut</option>' + devs.map(d => '<option value="' + esc(d.deviceId) + '">' + esc(d.label || "Micro") + "</option>").join("");
+    sel.innerHTML = '<option value="">' + L("Micro par défaut", "Default mic") + '</option>' + devs.map(d => '<option value="' + esc(d.deviceId) + '">' + esc(d.label || L("Micro", "Mic")) + "</option>").join("");
     if ([...sel.options].some(o => o.value === v)) sel.value = v;
   } catch(e) {}
 }
 async function startRec(id){
   if (rec) return;
-  try { await ensureMic(); } catch(e) { toast(e.name === "NotAllowedError" ? "Le micro est bloqué. Autorisez-le dans la barre d'adresse du navigateur, puis réessayez." : "Micro indisponible : " + e.message, true); return; }
+  try { await ensureMic(); } catch(e) { toast(e.name === "NotAllowedError" ? L("Le micro est bloqué. Autorisez-le dans la barre d'adresse du navigateur, puis réessayez.", "The mic is blocked. Allow it in the browser's address bar, then try again.") : L("Micro indisponible : ", "Mic unavailable: ") + e.message, true); return; }
   if (actx.state === "suspended") await actx.resume();
   stopSeq();
   const src = actx.createMediaStreamSource(stream);
@@ -1451,21 +1545,21 @@ async function stopRec(){
   const l = BYID[r.id];
   const row = document.querySelector('.line[data-id="' + r.id + '"]');
   const btn = row && row.querySelector(".rec");
-  if (row){ row.classList.remove("recording"); btn.classList.remove("on"); btn.textContent = "Envoi…"; btn.classList.add("busy"); row.querySelector(".meter").hidden = true; }
+  if (row){ row.classList.remove("recording"); btn.classList.remove("on"); btn.textContent = L("Envoi…", "Sending…"); btn.classList.add("busy"); row.querySelector(".meter").hidden = true; }
   const {blob, dur} = wavBlob(r.chunks, actx.sampleRate);
-  if (dur < 0.2){ toast("Prise trop courte, rien n'a été envoyé."); if (btn){ btn.textContent = "Rec"; btn.classList.remove("busy"); } return; }
+  if (dur < 0.2){ toast(L("Prise trop courte, rien n'a été envoyé.", "Take too short, nothing was sent.")); if (btn){ btn.textContent = "Rec"; btn.classList.remove("busy"); } return; }
   const fd = new FormData();
   fd.append("line", l.id); fd.append("folder", l.folder); fd.append("char", l.ch); fd.append("dur", dur.toFixed(2));
   fd.append("audio", blob, baseName(l));
   try {
     const j = await api("upload", fd);
     applyState(j);
-    toast("Prise " + j.take.t + " enregistrée · " + CHARS[l.ch].n + " " + l.num);
+    toast(L("Prise ", "Take ") + j.take.t + L(" enregistrée · ", " saved · ") + CHARS[l.ch].n + " " + l.num);
     refreshLine(l.id);
     if ($("#advance").checked) moveFocus(1);
     if ($("#autoia").checked && canConvert(l.ch)) convertTake(l.id, j.take.f);
   } catch(e) {
-    toast("La prise n'a pas pu être envoyée : " + e.message + " Elle est perdue, refaites-la.", true);
+    toast(L("La prise n'a pas pu être envoyée : ", "The take could not be sent: ") + e.message + L(" Elle est perdue, refaites-la.", " It is lost, record it again."), true);
   } finally {
     if (row && row.isConnected){ row.querySelector(".timer").hidden = true; btn.textContent = "Rec"; btn.classList.remove("busy"); }
   }
@@ -1508,10 +1602,10 @@ document.addEventListener("click", async e => {
   else if (act === "play") play(id, file);
   else if (act === "convert") convertTake(id, b.dataset.src);
   else if (act === "gen") generateLine(id);
-  else if (act === "select"){ try { applyState(await api("select", {line: id, file})); refreshLine(id); } catch(err) { toast(err.message, true); } }
+  else if (act === "select"){ try { applyState(await api("select", {line: id, file})); refreshLine(id); toast(L("Favori choisi : c'est cette prise qui partira au transfert.", "Favourite chosen: this is the take that will go to the transfer.")); } catch(err) { toast(err.message, true); } }
   else if (act === "delete"){
-    if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = "Supprimer ?"; setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "✕"; } }, 3000); return; }
-    try { applyState(await api("delete", {line: id, file})); refreshLine(id); toast("Prise supprimée."); } catch(err) { toast(err.message, true); }
+    if (!b.classList.contains("confirm")){ b.classList.add("confirm"); b.textContent = L("Supprimer ?", "Delete?"); setTimeout(() => { if (b.isConnected){ b.classList.remove("confirm"); b.textContent = "✕"; } }, 3000); return; }
+    try { applyState(await api("delete", {line: id, file})); refreshLine(id); toast(L("Prise supprimée.", "Take deleted.")); } catch(err) { toast(err.message, true); }
   }
 });
 $("#navsel").addEventListener("change", e => go(+e.target.value));
@@ -1520,7 +1614,7 @@ $("#playseq").addEventListener("click", playSeq);
 $("#mic").addEventListener("change", e => { store.set("mic", e.target.value); if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; } });
 $("#name").addEventListener("change", async e => {
   const v = e.target.value.trim(); if (!v || v === state.name) return;
-  try { applyState(await api("name", {name: v})); renderView(); toast("Prénom enregistré pour tout le monde : " + state.name); } catch(err) { toast(err.message, true); e.target.value = state.name; }
+  try { applyState(await api("name", {name: v})); renderView(); toast(L("Prénom enregistré pour tout le monde : ", "Name saved for everyone: ") + state.name); } catch(err) { toast(err.message, true); e.target.value = state.name; }
 });
 window.addEventListener("beforeunload", e => { if (rec){ e.preventDefault(); e.returnValue = ""; } });
 
@@ -1544,7 +1638,7 @@ async function pickDir(choose){
     // Autorisation refusée ou dossier retenu devenu inaccessible : on l'oublie. La demande a consommé le clic,
     // le sélecteur ne peut donc s'ouvrir qu'au clic suivant.
     try { await idb.set("dir-" + PID, null); } catch(e) {}
-    const err = new Error("Chrome n'a pas donné l'accès au dossier « " + dir.name + " ». Cliquez de nouveau sur Transfert audio pour choisir le dossier.");
+    const err = new Error(L("Chrome n'a pas donné l'accès au dossier « ", "Chrome didn't give access to the folder “") + dir.name + L(" ». Cliquez de nouveau sur Transfert audio pour choisir le dossier.", "”. Click Audio transfer again to choose the folder."));
     err.name = "AskAgain"; throw err;
   }
   dir = await window.showDirectoryPicker({id: ("ihd-" + PID).slice(0, 32), mode: "readwrite"});
@@ -1555,7 +1649,7 @@ async function pickDir(choose){
 async function fetchTimed(url){
   const ac = new AbortController(), h = setTimeout(() => ac.abort(), 90000);
   try { return await fetch(url, {cache: "no-store", signal: ac.signal}); }
-  catch(e){ throw e.name === "AbortError" ? new Error("le serveur ne répond pas (90 s)") : e; }
+  catch(e){ throw e.name === "AbortError" ? new Error(L("le serveur ne répond pas (90 s)", "the server doesn't answer (90 s)")) : e; }
   finally { clearTimeout(h); }
 }
 async function writeIfChanged(dirH, name, size, getBlob){
@@ -1574,29 +1668,29 @@ async function sameBytes(file, blob){
   return true;
 }
 async function transfer(e){
-  if (!window.showDirectoryPicker){ toast("Le transfert vers le PC marche dans Chrome ou Edge, sur ordinateur.", true); return; }
+  if (!window.showDirectoryPicker){ toast(L("Le transfert vers le PC marche dans Chrome ou Edge, sur ordinateur.", "The transfer to the PC works in Chrome or Edge, on a computer."), true); return; }
   const btn = $("#transfer");
   if (btn.disabled) return;
   let dir;
-  btn.textContent = "Dossier…";
+  btn.textContent = L("Dossier…", "Folder…");
   try { dir = await pickDir(e && e.shiftKey); }
   catch(err){
-    btn.textContent = "Transfert audio";
-    if (err.name === "AbortError") toast("Transfert annulé : aucun dossier choisi.");
+    btn.textContent = L("Transfert audio", "Audio transfer");
+    if (err.name === "AbortError") toast(L("Transfert annulé : aucun dossier choisi.", "Transfer cancelled: no folder chosen."));
     else if (err.name === "AskAgain") toast(err.message, true);
-    else toast("Dossier non accessible : " + err.message + " Cliquez de nouveau pour choisir le dossier.", true);
+    else toast(L("Dossier non accessible : ", "Folder not accessible: ") + err.message + L(" Cliquez de nouveau pour choisir le dossier.", " Click again to choose the folder."), true);
     if (err.name !== "AbortError") try { await idb.set("dir-" + PID, null); } catch(x) {}
     return;
   }
   btn.disabled = true;
-  btn.textContent = "Transfert…";
+  btn.textContent = L("Transfert…", "Transfer…");
   try {
     applyState(await api("state"));
     const ids = Object.keys(state.takes).filter(id => BYID[id]);
     const total = ids.reduce((a, id) => a + state.takes[id].reduce((n, t) => n + (t.cv ? 2 : 1), 0) + 1, 0);
     let done = 0, written = 0;
     const cache = {};
-    const fetchBlob = async f => { if (!cache[f]){ const r = await fetchTimed(audioUrl(null, f)); if (!r.ok) throw new Error("fichier " + f + " introuvable sur le serveur"); cache[f] = await r.blob(); } return cache[f]; };
+    const fetchBlob = async f => { if (!cache[f]){ const r = await fetchTimed(audioUrl(null, f)); if (!r.ok) throw new Error(L("fichier ", "file ") + f + L(" introuvable sur le serveur", " not found on the server")); cache[f] = await r.blob(); } return cache[f]; };
     for (const id of ids){
       const l = BYID[id];
       const seqDir = await dir.getDirectoryHandle(l.folder, {create: true});
@@ -1604,7 +1698,7 @@ async function transfer(e){
       for (const t of state.takes[id]){
         for (const x of t.cv ? [t, t.cv] : [t]){
           if (await writeIfChanged(prDir, x.f.split("/")[1], x.s, () => fetchBlob(x.f))) written++;
-          btn.textContent = "Transfert " + (++done) + "/" + total;
+          btn.textContent = L("Transfert ", "Transfer ") + (++done) + "/" + total;
         }
       }
       const selF = state.selected[id];
@@ -1613,7 +1707,7 @@ async function transfer(e){
         const blob = await fetchBlob(selF);
         if (!(await sameBytes(await fh.getFile(), blob))){ const w = await fh.createWritable(); await w.write(blob); await w.close(); written++; }
       }
-      btn.textContent = "Transfert " + (++done) + "/" + total;
+      btn.textContent = L("Transfert ", "Transfer ") + (++done) + "/" + total;
     }
     // Lecteur hors ligne : la page et le scénario du projet.
     try {
@@ -1622,11 +1716,11 @@ async function transfer(e){
       const page = await (await fetch("index.html", {cache: "no-store"})).blob();
       const w2 = await (await dir.getFileHandle("In-House-Dubbing.html", {create: true})).createWritable(); await w2.write(page); await w2.close();
     } catch(e) {}
-    toast(written ? written + " fichier(s) copié(s) dans " + dir.name + "." : "Tout est déjà à jour dans " + dir.name + ".");
+    toast(written ? written + L(" fichier(s) copié(s) dans ", " file(s) copied to ") + dir.name + "." : L("Tout est déjà à jour dans ", "Everything is already up to date in ") + dir.name + ".");
   } catch(e) {
-    toast("Transfert interrompu : " + e.message, true);
+    toast(L("Transfert interrompu : ", "Transfer stopped: ") + e.message, true);
   } finally {
-    btn.disabled = false; btn.textContent = "Transfert audio";
+    btn.disabled = false; btn.textContent = L("Transfert audio", "Audio transfer");
   }
 }
 $("#transfer").addEventListener("click", transfer);
@@ -1651,31 +1745,32 @@ async function startApp(){
   showWho();
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) fillMics();
   if (PID) await openProject(PID); else goHome();
-  if (!polling) polling = setInterval(async () => { if (!ME || !PID || rec || document.hidden) return; try { const before = JSON.stringify([state.takes, state.selected, state.name]); applyState(await api("state")); if (JSON.stringify([state.takes, state.selected, state.name]) !== before){ $("#name").value = state.name; renderAll(); } } catch(e) {} }, 20000);
+  if (!polling) polling = setInterval(async () => { if (!ME || !PID || rec || document.hidden) return; try { const before = JSON.stringify([state.takes, state.selected, state.pinned, state.name]); applyState(await api("state")); if (JSON.stringify([state.takes, state.selected, state.pinned, state.name]) !== before){ $("#name").value = state.name; renderAll(); } } catch(e) {} }, 20000);
 }
 function syncTop(){ document.documentElement.style.setProperty("--toph", ($(".top").offsetHeight + 16) + "px"); }
 window.addEventListener("resize", syncTop);
 (async function init(){
+  applyStaticLang();
   syncTop();
   if (ONLINE){
-    $("#mode").textContent = "En ligne"; $("#mode").classList.add("on");
+    $("#mode").textContent = L("En ligne", "Online"); $("#mode").classList.add("on");
     let me = null;
     if (await detectSupabase()){
-      $("#mode").textContent = "En ligne · Supabase";
-      try { me = await sbMe(); } catch(e) { toast("Supabase injoignable : " + e.message, true); return; }
+      $("#mode").textContent = L("En ligne · Supabase", "Online · Supabase");
+      try { me = await sbMe(); } catch(e) { toast(L("Supabase injoignable : ", "Supabase unreachable: ") + e.message, true); return; }
       if (!me.user){ showGateSB("login"); return; }
       if (me.user.role === "pending"){ showGateSB("pending"); return; }
       ME = me.user; await startApp(); return;
     }
-    try { me = await (await fetch("api.php?action=me", {cache: "no-store"})).json(); } catch(e) { toast("Serveur injoignable.", true); return; }
-    if (me.needsSetup){ if (KEY) showGate("setup"); else $("#gate").hidden = false, $("#gate").innerHTML = '<form><h2>In-House-Dubbing</h2><p>Le compte administrateur n\'a pas encore été créé. Ouvrez le lien d\'installation complet.</p></form>'; return; }
+    try { me = await (await fetch("api.php?action=me", {cache: "no-store"})).json(); } catch(e) { toast(L("Serveur injoignable.", "Server unreachable."), true); return; }
+    if (me.needsSetup){ if (KEY) showGate("setup"); else $("#gate").hidden = false, $("#gate").innerHTML = '<form>' + langSwitchHtml() + '<h2>In-House-Dubbing</h2><p>' + L("Le compte administrateur n'a pas encore été créé. Ouvrez le lien d'installation complet.", "The administrator account hasn't been created yet. Open the full installation link.") + '</p></form>'; return; }
     if (!me.user){ showGate("login"); return; }
     ME = me.user;
     await startApp();
   } else {
-    $("#mode").textContent = "Dossier local · lecture seule";
+    $("#mode").textContent = L("Dossier local · lecture seule", "Local folder · read only");
     ["#transfer", "#micfield", "#namefield", "#advfield"].forEach(q => $(q).hidden = true);
-    $("#keys").innerHTML = "<b>P</b> écouter · <b>↑ ↓</b> réplique";
+    $("#keys").innerHTML = L("<b>P</b> écouter · <b>↑ ↓</b> réplique", "<b>P</b> play · <b>↑ ↓</b> line");
     const sc = document.createElement("script");
     sc.src = "_projet.js";
     sc.onload = () => {
@@ -1684,7 +1779,7 @@ window.addEventListener("resize", syncTop);
       const s = store.get("seq"); cur = (s !== null && !isNaN(+s) && +s >= -2 && +s < SEQS.length) ? +s : 0;
       setChrome(true); $("#home").hidden = true; $("#transfer").hidden = true; renderFilters(); renderAll(); probeLocal();
     };
-    sc.onerror = () => { setChrome(false); $("#view").innerHTML = '<div class="seqhead"><h2>In-House-Dubbing</h2><p class="summary">Le fichier <code>_projet.js</code> est introuvable à côté de cette page. Il est déposé par le bouton « Transfert audio » de la version en ligne.</p></div>'; };
+    sc.onerror = () => { setChrome(false); $("#view").innerHTML = '<div class="seqhead"><h2>In-House-Dubbing</h2><p class="summary">' + L("Le fichier <code>_projet.js</code> est introuvable à côté de cette page. Il est déposé par le bouton « Transfert audio » de la version en ligne.", "The <code>_projet.js</code> file can't be found next to this page. It is dropped by the “Audio transfer” button of the online version.") + '</p></div>'; };
     document.body.appendChild(sc);
   }
 })();

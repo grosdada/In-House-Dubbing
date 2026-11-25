@@ -50,7 +50,11 @@ Le PDF doit avoir la mise en page standard d'un scénario (en-têtes INT./EXT., 
 
 Dans le projet, onglet **IA Voice selector** : une voix ElevenLabs par personnage (▶ pour l'écouter). Cochez **Voix IA automatique après chaque prise** pour que chaque prise soit convertie dès son envoi. Si une voix ne convient pas, changez-la : le bouton **↻ Refaire ses prises** reconvertit tout à partir des originaux, qui ne sont jamais écrasés.
 
-Pas encore de comédien ? Le bouton **Generate**, à côté de **Rec**, fait lire la réplique par la voix IA du personnage, à partir du texte du scénario (text to speech). **✦ Generate la séquence** fait de même pour toutes les répliques de la séquence qui n'ont encore aucune prise. Ces générations portent l'étiquette **IA voice**, deviennent la prise retenue et partent au transfert comme les autres. Les sons vocaux (rires, souffles) ne se génèrent pas : ils s'enregistrent. Le modèle de génération se choisit dans **IA Voice selector** (Multilingue v2, v3 plus expressif, Flash v2.5 rapide).
+Pas encore de comédien ? Le bouton **Generate**, à côté de **Rec**, fait lire la réplique par la voix IA du personnage, à partir du texte du scénario (text to speech). **✦ Generate la séquence** fait de même pour toutes les répliques de la séquence qui n'ont encore aucune prise. Ces générations portent l'étiquette **IA voice** et partent au transfert comme les autres.
+
+Favori : la prise marquée ★ (en or) est celle qui part au transfert. Par défaut c'est la plus récente ; cliquez ☆ sur une autre pour la choisir. Un favori choisi à la main reste en place même si d'autres prises arrivent ensuite, et le transfert remplace le fichier sur le PC quand le favori change.
+
+Langue : le bouton **FR | EN** en haut à droite passe toute l'interface en anglais (ou en français). Le contenu des projets n'est pas traduit. Les sons vocaux (rires, souffles) ne se génèrent pas : ils s'enregistrent. Le modèle de génération se choisit dans **IA Voice selector** (Multilingue v2, v3 plus expressif, Flash v2.5 rapide).
 
 ## 5. Inviter la personne qui fait les voix
 

@@ -65,6 +65,8 @@ create table if not exists public.selected (
   f text not null,
   primary key (project, line)
 );
+-- Favori choisi à la main (★) : une nouvelle prise ne le remplace pas.
+alter table public.selected add column if not exists pinned boolean not null default false;
 create table if not exists public.project_meta (       -- prénom réglable ({NAME})
   project text primary key references public.projects on delete cascade,
   name text

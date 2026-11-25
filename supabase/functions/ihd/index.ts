@@ -22,7 +22,43 @@ const cors = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json; charset=utf-8" } });
-const fail = (error: string, status = 400) => json({ ok: false, error }, status);
+// Messages en anglais quand la page est en anglais (champ « lang » envoyé par la page).
+let EN = false;
+const EN_T: Record<string, string> = {
+  "Action inconnue.": "Unknown action.",
+  "Aucune clé API Claude n'est enregistrée (Accueil › Réglages).": "No Claude API key is saved (Home › Settings).",
+  "Aucune clé API ElevenLabs n'est enregistrée. L'admin doit l'ajouter dans « IA Voice selector ».": "No ElevenLabs API key is saved. The admin has to add it in “IA Voice selector”.",
+  "Aucune clé API ElevenLabs n'est enregistrée.": "No ElevenLabs API key is saved.",
+  "Aucune voix ElevenLabs n'est choisie pour ce personnage. Choisissez-la dans « IA Voice selector ».": "No ElevenLabs voice is chosen for this character. Choose it in “IA Voice selector”.",
+  "Ce projet ne vous est pas ouvert.": "This project isn't open to you.",
+  "Cette clé n'a pas le format d'une clé API Claude (sk-ant-…).": "This doesn't look like a Claude API key (sk-ant-…).",
+  "Cette clé n'a pas le format d'une clé API ElevenLabs.": "This doesn't look like an ElevenLabs API key.",
+  "Cette réplique est vide.": "This line is empty.",
+  "Compte en attente de validation par l'admin.": "Account waiting for the admin's approval.",
+  "ElevenLabs n'a pas renvoyé de WAV.": "ElevenLabs didn't return a WAV.",
+  "Fichier de la prise introuvable dans le stockage.": "Take file not found in storage.",
+  "Les sons vocaux ne se génèrent pas : enregistrez-les.": "Vocal sounds can't be generated: record them.",
+  "Modèle inconnu.": "Unknown model.",
+  "Méthode non permise.": "Method not allowed.",
+  "Prise introuvable.": "Take not found.",
+  "Requête illisible.": "Unreadable request.",
+  "Requête invalide.": "Invalid request.",
+  "Réplique introuvable dans le scénario.": "Line not found in the script.",
+  "Réplique invalide.": "Invalid line.",
+  "Réservé à l'administrateur.": "Admin only.",
+  "Session expirée. Reconnectez-vous.": "Session expired. Sign in again.",
+  "Vous ne pouvez pas supprimer votre propre compte.": "You can't delete your own account.",
+};
+const EN_P: [RegExp, string][] = [
+  [/^Impossible d'enregistrer la génération : (.*)$/s, "Could not save the generation: $1"],
+  [/^Impossible d'enregistrer la version IA : (.*)$/s, "Could not save the AI version: $1"],
+  [/^ElevenLabs refuse la clé API \(401\)\. (.*)$/s, "ElevenLabs refuses the API key (401). $1"],
+  [/^ElevenLabs a répondu (\d+) : (.*)$/s, "ElevenLabs answered $1: $2"],
+  [/^L'API Claude refuse la clé \(401\)\. (.*)$/s, "The Claude API refuses the key (401). $1"],
+  [/^L'API Claude a répondu (\d+) : (.*)$/s, "The Claude API answered $1: $2"],
+];
+const enError = (m: string) => { if (EN_T[m]) return EN_T[m]; for (const [re, en] of EN_P) if (re.test(m)) return m.replace(re, en); return m; };
+const fail = (error: string, status = 400) => json({ ok: false, error: EN ? enError(error) : error }, status);
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
@@ -56,6 +92,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return fail("Méthode non permise.", 405);
 
+  let body: Record<string, string> = {};
+  try { body = await req.json(); } catch (_) { return fail("Requête illisible."); }
+  EN = body.lang === "en";
+
   // Qui appelle ?
   const auth = req.headers.get("Authorization") || "";
   const { data: u } = await admin.auth.getUser(auth.replace(/^Bearer\s+/i, ""));
@@ -65,8 +105,6 @@ Deno.serve(async (req) => {
   const isAdmin = me.role === "admin";
   const canSee = (p: string) => isAdmin || (me.projects || []).includes(p);
 
-  let body: Record<string, string> = {};
-  try { body = await req.json(); } catch (_) { return fail("Requête illisible."); }
   const action = body.action || "";
   const adminOnly = ["elkey", "aikey", "aimodel", "claude", "userdel"];
   if (adminOnly.includes(action) && !isAdmin) return fail("Réservé à l'administrateur.", 403);
@@ -172,8 +210,8 @@ Deno.serve(async (req) => {
       if (up.error) return fail("Impossible d'enregistrer la version IA : " + up.error.message, 500);
       const cv = { f: cvf, s: r.buf.length, d: Math.floor(Date.now() / 1000), v: voice.voice_name, vid: voice.voice_id, fmt: format };
       await admin.from("takes").update({ cv }).eq("project", project).eq("f", file);
-      const { data: sel } = await admin.from("selected").select("f").eq("project", project).eq("line", line).maybeSingle();
-      if (sel?.f === file) await admin.from("selected").upsert({ project, line, f: cvf });
+      const { data: sel } = await admin.from("selected").select("f,pinned").eq("project", project).eq("line", line).maybeSingle();
+      if (sel?.f === file && !sel?.pinned) await admin.from("selected").upsert({ project, line, f: cvf, pinned: false });
       return json({ ok: true, cv });
     }
 
@@ -229,7 +267,8 @@ Deno.serve(async (req) => {
       const gen = { v: voice.voice_name, vid: voice.voice_id, model, fmt: format };
       const ins = await admin.from("takes").insert({ project, line, t, f, s: buf.length, dur, by_name: me.name, gen });
       if (ins.error) return fail(ins.error.message, 500);
-      await admin.from("selected").upsert({ project, line, f });
+      const { data: pin } = await admin.from("selected").select("pinned").eq("project", project).eq("line", line).maybeSingle();
+      if (!pin?.pinned) await admin.from("selected").upsert({ project, line, f, pinned: false });
       return json({ ok: true, take: { f, t, s: buf.length, dur, by: me.name, gen } });
     }
 
